@@ -1,18 +1,19 @@
 import { useState, useRef, useEffect } from 'react'
 import { Editor } from '@monaco-editor/react'
-import { Search, Wand2, FileCode, Shield, Plus, X, MoreVertical, Download, Trash2, Eye, Code2, Sparkles, FolderPlus, Package, Edit, LogOut, User, Wifi, WifiOff, Copy, ChevronRight, ChevronDown, Folder, FolderOpen, Save, Check } from 'lucide-react'
+import { Search, Wand2, FileCode, Shield, Plus, X, MoreVertical, Download, Trash2, Eye, Code2, Sparkles, FolderPlus, Package, Edit, LogOut, User, Wifi, WifiOff, Copy, ChevronRight, ChevronDown, Folder, FolderOpen, Save, Check, Terminal, Store } from 'lucide-react'
 import { createClient } from '@supabase/supabase-js'
 import * as prettier from 'prettier/standalone'
 import * as parserBabel from 'prettier/plugins/babel'
 import * as prettierPluginEstree from 'prettier/plugins/estree'
 import * as parserPostcss from 'prettier/plugins/postcss'
 
+// HYE BACKEND - Replace with your Render URL
+const API_URL = import.meta.env.VITE_API_URL || 'https://hye-api.onrender.com'
+
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
   import.meta.env.VITE_SUPABASE_ANON_KEY
 )
-
-
 
 export default function App() {
   const [user, setUser] = useState(null)
@@ -94,7 +95,7 @@ export default function App() {
 
     if (projData && projData.length > 0) {
       const merged = projData.map(p => ({
-      ...p,
+    ...p,
         files: fileData.filter(f => f.project_id === p.id)
       }))
       setProjects(merged)
@@ -208,7 +209,7 @@ export default function App() {
   const updateCode = (newCode) => {
     const newProjects = projects.map(p =>
       p.id === activeProjectId? {
-      ...p,
+    ...p,
         files: p.files.map(f => f.id === activeFileId? {...f, code: newCode, modified: Date.now()} : f)
       } : p
     )
@@ -279,7 +280,7 @@ export default function App() {
     if (newName) {
       const newProjects = projects.map(p =>
         p.id === activeProjectId? {
-        ...p,
+      ...p,
           files: p.files.map(f => f.id === id? {...f, name: newName} : f)
         } : p
       )
@@ -345,44 +346,31 @@ export default function App() {
     return files
   }
 
-  // HYECODE FIX 2: This already correct - calls /api/ai
+  // NOW CALLS YOUR RENDER BACKEND
   const handleAIBuild = async () => {
     if (!aiPrompt.trim()) return
     setFixing(true)
     setFixMethod('🤖 AI Building...')
 
     try {
-      const systemInstructions = `
-You are Hyecode AI. Respond with files in this EXACT format:
-
-FILE: src/App.jsx
-\`\`\`jsx
-// code here
-\`\`\`
-
-FILE: src/index.css
-\`\`\`css
-/* code here */
-\`\`\`
-
-RULES: Start every file with FILE: path/name.ext. Wrap code in \`\`\` blocks.
-`
-      const finalPrompt = `${systemInstructions}\n\nUser request: ${aiPrompt}`
-
-      const res = await fetch('/api/ai', {
+      const res = await fetch(`${API_URL}/ai`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: finalPrompt })
+        body: JSON.stringify({
+          prompt: aiPrompt,
+          mode: "build",
+          code: activeFile?.code || "",
+          user_id: user?.id || "guest"
+        })
       })
 
-      // HYECODE FIX 3: Add error check before.json()
       if (!res.ok) {
         const errText = await res.text()
         throw new Error(`Backend error ${res.status}: ${errText}`)
       }
 
       const data = await res.json()
-      const aiText = Array.isArray(data)? data[0]?.generated_text : data.generated_text || ""
+      const aiText = data.response || ""
       const newFiles = parseAIResponseToFiles(aiText)
 
       if (newFiles.length > 0) {
@@ -432,18 +420,21 @@ RULES: Start every file with FILE: path/name.ext. Wrap code in \`\`\` blocks.
     return fixed
   }
 
-  // HYECODE FIX 4: Remove HF_TOKEN. Call backend instead
+  // NOW CALLS YOUR RENDER BACKEND
   const huggingFaceFix = async (codeText) => {
-    const response = await fetch('/api/ai', {
+    const response = await fetch(`${API_URL}/ai`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        prompt: `Fix all syntax errors and ESLint issues. Return only corrected code, no explanations:\n\n${codeText}`
+        prompt: `Fix all syntax errors and ESLint issues. Return only corrected code, no explanations:\n\n${codeText}`,
+        mode: "fix",
+        code: codeText,
+        user_id: user?.id || "guest"
       })
     })
     if (!response.ok) return codeText
     const result = await response.json()
-    const text = result[0]?.generated_text || result.generated_text || codeText
+    const text = result.response || codeText
     return text.replace(/.*```(?:jsx|javascript)?\n?([\s\S]*?)```.*/s, '$1').trim() || codeText
   }
 
@@ -473,7 +464,6 @@ RULES: Start every file with FILE: path/name.ext. Wrap code in \`\`\` blocks.
       setFixMethod('✨ Formatted')
     } catch {}
 
-    // HYECODE FIX 5: Remove token check. Always try backend if online
     if (online) {
       try {
         setFixMethod('🤖 AI Fixing...')
@@ -510,6 +500,17 @@ RULES: Start every file with FILE: path/name.ext. Wrap code in \`\`\` blocks.
     a.href = url
     a.download = 'hyecode_backup.json'
     a.click()
+    setShowMenu(false)
+  }
+
+  // NEW: Deep link to HyeTerminal + HyeMarketplace
+  const openHyeTerminal = () => {
+    window.location.href = `hye://terminal?project=${activeProjectId}&user=${user?.id || 'guest'}`
+    setShowMenu(false)
+  }
+
+  const openHyeMarketplace = () => {
+    window.location.href = `hye://marketplace`
     setShowMenu(false)
   }
 
@@ -674,6 +675,16 @@ RULES: Start every file with FILE: path/name.ext. Wrap code in \`\`\` blocks.
                   <button onClick={handleFixAll} disabled={fixing} className="w-full px-4 py-2 hover:bg-gray-800 text-left text-sm flex items-center gap-2 text-blue-400 disabled:opacity-50">
                     <Wand2 className="w-4 h-4" /> {fixing? 'Fixing...' : 'Fix All'}
                   </button>
+
+                  <div className="border-t border-gray-700 my-1"></div>
+                  <div className="px-4 py-2 text-xs text-gray-400 font-bold">HYE ECOSYSTEM</div>
+                  <button onClick={openHyeMarketplace} className="w-full px-4 py-2 hover:bg-purple-900 text-left text-sm flex items-center gap-2 text-purple-400">
+                    <Store className="w-4 h-4" /> Hye Marketplace
+                  </button>
+                  <button onClick={openHyeTerminal} className="w-full px-4 py-2 hover:bg-green-900 text-left text-sm flex items-center gap-2 text-green-400">
+                    <Terminal className="w-4 h-4" /> Hye Terminal
+                  </button>
+
                   <div className="border-t border-gray-700 my-1"></div>
                   <div className="px-4 py-2 text-xs text-gray-400 font-bold">PROJECTS</div>
                   {projects.map(p => (
@@ -728,7 +739,7 @@ RULES: Start every file with FILE: path/name.ext. Wrap code in \`\`\` blocks.
                 <FolderOpen className="w-4 h-4" /> EXPLORER
               </span>
               <div className="flex gap-1">
-                                <button onClick={() => createNewFile()} className="p-1 hover:bg-gray-800 rounded">
+                <button onClick={() => createNewFile()} className="p-1 hover:bg-gray-800 rounded">
                   <Plus className="w-3.5 h-3.5" />
                 </button>
                 <button onClick={createNewFolder} className="p-1 hover:bg-gray-800 rounded">
@@ -750,7 +761,7 @@ RULES: Start every file with FILE: path/name.ext. Wrap code in \`\`\` blocks.
       )}
 
       {showNewProject && (
-                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-gray-900 border-gray-700 rounded-lg p-6 w-full max-w-sm">
             <h3 className="text-lg font-bold mb-3">New Project</h3>
             <input value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} placeholder="Project name..." className="w-full bg-gray-800 border-gray-700 rounded p-2 text-sm mb-3 focus:outline-none focus:border-blue-500" />
@@ -880,4 +891,4 @@ RULES: Start every file with FILE: path/name.ext. Wrap code in \`\`\` blocks.
       </div>
     </div>
   )
-}
+              }
