@@ -864,31 +864,33 @@ export default function App() {
         </div>
       )}
 
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {view === 'code'? (
-          <div className="h-full w-full border-4 border-black-500">
-            <Editor
-              height="600px"
-              width="100%"
-              path={activeFile?.name}
-              language={activeFile?.name.endsWith('.css')? 'css' : activeFile?.name.endsWith('.html')? 'html' : activeFile?.name.endsWith('.json')? 'json' : 'javascript'}
-              value={activeFile?.code || ''}
-              onChange={updateCode}
-              onMount={handleEditorDidMount}
-              theme="vs-dark"
-              options={{
-                fontSize: 14,
-                minimap: { enabled: false },
-                automaticLayout: true,
-                scrollBeyondLastLine: false,
-                wordWrap: 'on'
-              }}
-            />
-          </div>
-        ) : (
-          <iframe srcDoc={previewHTML} className="w-full h-full bg-white" sandbox="allow-scripts" />
-        )}
-      </div>
+      <div className="flex-1 min-h-0 overflow-hidden bg-[#1e1e1e]">
+  {view === 'code'? (
+    <div className="h-full w-full">
+      <Editor
+        height="100%"  // Not calc() - use 100%
+        width="100%"
+        path={activeFile?.name}
+        language={activeFile?.name.endsWith('.css')? 'css' : activeFile?.name.endsWith('.html')? 'html' : activeFile?.name.endsWith('.json')? 'json' : 'javascript'}
+        value={activeFile?.code || '// Loading...'}
+        onChange={updateCode}
+        onMount={handleEditorDidMount}
+        theme="vs-dark"
+        options={{
+          fontSize: 14,
+          minimap: { enabled: false },
+          automaticLayout: true, // Key fix
+          scrollBeyondLastLine: false,
+          wordWrap: 'on',
+          fixedOverflowWidgets: true // Prevents cut-off
+        }}
+        loading={<div className="text-white p-4">Loading Monaco...</div>}
+      />
+    </div>
+  ) : (
+    <iframe srcDoc={previewHTML} className="w-full h-full bg-white" sandbox="allow-scripts" />
+  )}
+</div>
     </div>
   )
               }
