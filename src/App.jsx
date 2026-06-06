@@ -868,7 +868,7 @@ export default function App() {
         {view === 'code'? (
           <div className="h-full w-full border-4 border-black-500">
             <Editor
-              height="calc(100vh - 180px)"
+              height="600px"
               width="100%"
               path={activeFile?.name}
               language={activeFile?.name.endsWith('.css')? 'css' : activeFile?.name.endsWith('.html')? 'html' : activeFile?.name.endsWith('.json')? 'json' : 'javascript'}
