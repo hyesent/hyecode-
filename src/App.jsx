@@ -624,7 +624,7 @@ export default function App() {
   const fileTree = activeProject? buildFileTree(activeProject.files) : {}
 
   return (
-    <div className="h-screen w-screen bg-gray-950 text-white flex-col overflow-hidden">
+    <div className="h-screen w-screen bg-gray-950 text-white flex flex-colflex-col overflow-hidden">
       <div className="p-3 border-b border-gray-800 flex items-center justify-between shrink-0 relative z-20 bg-gray-950">
         <div className="flex items-center gap-2">
           <FileCode className="w-5 h-5 text-blue-500" />
