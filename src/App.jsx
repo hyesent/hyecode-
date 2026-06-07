@@ -5,11 +5,11 @@ import * as prettier from 'prettier/standalone'
 import * as parserBabel from 'prettier/plugins/babel'
 import * as prettierPluginEstree from 'prettier/plugins/estree'
 import * as parserPostcss from 'prettier/plugins/postcss'
-import { 
-  Code2, Eye, Save, FolderPlus, FilePlus, Settings, Zap, 
-  Download, Wifi, WifiOff, User, LogOut, Search, 
-  ChevronDown, ChevronRight, Folder, FolderOpen, X, Check, 
-  Terminal, Store, Sparkles, Wand2, Menu, Plus, Trash2, AlertCircle 
+import {
+  Code2, Eye, Save, FolderPlus, FilePlus, Settings, Zap,
+  Download, Wifi, WifiOff, User, LogOut, Search,
+  ChevronDown, ChevronRight, Folder, FolderOpen, X, Check,
+  Terminal, Store, Sparkles, Wand2, Menu, Plus, Trash2, AlertCircle
 } from 'lucide-react'
 
 const API = 'https://hye-api.onrender.com'
@@ -18,34 +18,32 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 )
 
-// LEVEL 1: Local regex fixes - no network
 const localFix = (codeText) => {
   let fixed = codeText
   const openBraces = (fixed.match(/{/g) || []).length
   const closeBraces = (fixed.match(/}/g) || []).length
   if (openBraces > closeBraces) fixed += '}'.repeat(openBraces - closeBraces)
-  
+
   const openParens = (fixed.match(/\(/g) || []).length
   const closeParens = (fixed.match(/\)/g) || []).length
   if (openParens > closeParens) fixed += ')'.repeat(openParens - closeParens)
-  
+
   fixed = fixed.replace(/([^;\s])\s*\n\s*([a-zA-Z_$])/g, '$1;\n$2')
   return fixed
 }
 
-// LEVEL 2: Offline JS lint rules - no network
 const offlineLocalFix = (codeText) => {
   let fixed = codeText
   fixed = fixed.replace(/([^=!])==([^=])/g, '$1=== $2')
   fixed = fixed.replace(/([^=!])!=([^=])/g, '$1!== $2')
-  
+
   const quotes = (fixed.match(/(?<!\\)"/g) || []).length
   if (quotes % 2!== 0) fixed += '"'
   const singleQuotes = (fixed.match(/(?<!\\)'/g) || []).length
   if (singleQuotes % 2!== 0) fixed += "'"
   const backticks = (fixed.match(/(?<!\\)`/g) || []).length
   if (backticks % 2!== 0) fixed += "`"
-  
+
   fixed = fixed.replace(/useEffect\(\(\) => {([^}]+)},\s*\[\]\)/g, 'useEffect(() => {$1}, [])')
   fixed = fixed.replace(/console\.log\(\)/g, 'console.log("")')
   return fixed
@@ -62,7 +60,7 @@ export default function HyecodeEditor() {
     id: 1,
     name: 'App.jsx',
     path: 'App.jsx',
-    content: `export default function App() {\n return (\n <div className="min-h-screen bg-black text-white flex items-center justify-center">\n <h1 className="text-4xl font-bold">HYE Editor 🚀</h1>\n </div>\n )\n}`,
+    content: `export default function App() {\n return (\n <div style={{minHeight: '100vh', background: 'black', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center'}}>\n <h1 style={{fontSize: '36px', fontWeight: 'bold'}}>HYE Editor 🚀</h1>\n </div>\n )\n}`,
     lang: 'javascript'
   }])
   const [activeId, setActiveId] = useState(1)
@@ -80,7 +78,7 @@ export default function HyecodeEditor() {
   const [fixing, setFixing] = useState(false)
   const [fixMethod, setFixMethod] = useState('')
   const [errorMsg, setErrorMsg] = useState('')
-  
+
   const editorRef = useRef(null)
   const saveTimeout = useRef(null)
   const activeFile = files.find(f => f.id === activeId)
@@ -126,10 +124,10 @@ export default function HyecodeEditor() {
     setStatus('loading cloud...')
     try {
       const { data: fileData } = await supabase
-     .from('files')
-     .select('*')
-     .eq('user_id', userId)
-     .order('created_at', { ascending: true })
+    .from('files')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: true })
 
       if (fileData && fileData.length > 0) {
         setFiles(fileData)
@@ -147,7 +145,7 @@ export default function HyecodeEditor() {
 
   const saveToCloud = async () => {
     if (!user || isGuest ||!online) return
-    
+
     setStatus('saving...')
     try {
       for (let f of files) {
@@ -267,13 +265,12 @@ export default function HyecodeEditor() {
     setMenu(false)
   }
 
-  // BUTTON 1: Local Fix - instant, no network
   const handleLocalFix = () => {
     if (!activeFile) return
     setFixing(true)
     setErrorMsg('')
     setFixMethod('⚡ Local Fix Running...')
-    
+
     try {
       let fixed = localFix(activeFile.content)
       fixed = offlineLocalFix(fixed)
@@ -282,7 +279,7 @@ export default function HyecodeEditor() {
     } catch (e) {
       setErrorMsg('Local Fix Error: ' + e.message)
     }
-    
+
     setFixing(false)
     setTimeout(() => {
       setFixMethod('')
@@ -291,27 +288,26 @@ export default function HyecodeEditor() {
     setMenu(false)
   }
 
-  // BUTTON 2: Online Fix - calls /fix endpoint, not AI
   const handleOnlineFix = async () => {
     if (!activeFile) return
     setFixing(true)
     setErrorMsg('')
     setFixMethod('🌐 Online Fix Running...')
-    
+
     try {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 10000)
-      
+
       const res = await fetch(`${API}/fix`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({ code: activeFile.content })
       })
-      
+
       clearTimeout(timeoutId)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      
+
       const data = await res.json()
       updateContent(data.fixed || data.code || activeFile.content)
       setFixMethod('🌐 Online Fix Complete')
@@ -325,7 +321,7 @@ export default function HyecodeEditor() {
       }
       setFixMethod('❌ Online Fix Failed')
     }
-    
+
     setFixing(false)
     setTimeout(() => {
       setFixMethod('')
@@ -334,17 +330,16 @@ export default function HyecodeEditor() {
     setMenu(false)
   }
 
-  // BUTTON 3: AI Fix
   const handleAiFix = async () => {
     if (!activeFile) return
     setFixing(true)
     setErrorMsg('')
     setFixMethod('🤖 AI Fixing...')
-    
+
     try {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 15000)
-      
+
       const res = await fetch(`${API}/ai`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -355,10 +350,10 @@ export default function HyecodeEditor() {
           user_id: user?.id || 'guest'
         })
       })
-      
+
       clearTimeout(timeoutId)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      
+
       const data = await res.json()
       let fixed = data.response || data.text || activeFile.content
       fixed = fixed.replace(/```[\w]*\n?([\s\S]*?)```/g, '$1').trim()
@@ -374,7 +369,7 @@ export default function HyecodeEditor() {
       }
       setFixMethod('❌ AI Fix Failed')
     }
-    
+
     setFixing(false)
     setTimeout(() => {
       setFixMethod('')
@@ -383,17 +378,16 @@ export default function HyecodeEditor() {
     setMenu(false)
   }
 
-  // BUTTON 4: AI Build
   const aiBuild = async () => {
     if (!aiPrompt.trim()) return
     setAiLoading(true)
     setStatus('AI building...')
     setErrorMsg('')
-    
+
     try {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 20000)
-      
+
       const res = await fetch(`${API}/ai`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -405,17 +399,17 @@ export default function HyecodeEditor() {
           user_id: user?.id || 'guest'
         })
       })
-      
+
       clearTimeout(timeoutId)
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
-      
+
       const data = await res.json()
       const text = data.response || data.text || ''
-      
+
       const fileRegex = /FILE:\s*(.+?)\n```[\w]*\n([\s\S]*?)```/g
       const newFiles = []
       let match
-      
+
       while ((match = fileRegex.exec(text))!== null) {
         const path = match[1].trim()
         const content = match[2].trim()
@@ -428,7 +422,7 @@ export default function HyecodeEditor() {
           lang: name.split('.').pop() === 'jsx'? 'javascript' : 'plaintext'
         })
       }
-      
+
       if (newFiles.length > 0) {
         setFiles([...files,...newFiles])
         setActiveId(newFiles[0].id)
@@ -447,7 +441,7 @@ export default function HyecodeEditor() {
       }
       setStatus('AI failed')
     }
-    
+
     setAiLoading(false)
     setAiOpen(false)
     setAiPrompt('')
@@ -501,11 +495,11 @@ export default function HyecodeEditor() {
           <div key={fullPath}>
             <div
               onClick={() => setFolders({...folders, [fullPath]:!open })}
-              className="flex items-center gap-1 px-2 py-1.5 hover:bg-gray-800 cursor-pointer text-sm"
+              className="tree-item"
               style={{ paddingLeft: `${depth * 12 + 8}px` }}
             >
-              {open? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-              {open? <FolderOpen className="w-4 h-4 text-blue-400" /> : <Folder className="w-4 h-4 text-blue-400" />}
+              {open? <ChevronDown className="tree-icon" /> : <ChevronRight className="tree-icon" />}
+              {open? <FolderOpen className="tree-icon" style={{color: '#58a6ff'}} /> : <Folder className="tree-icon" style={{color: '#58a6ff'}} />}
               <span>{name}</span>
             </div>
             {open && renderTree(item.children, fullPath, depth + 1)}
@@ -517,18 +511,16 @@ export default function HyecodeEditor() {
           <div
             key={item.id}
             onClick={() => setActiveId(item.id)}
-            className={`flex items-center gap-2 px-2 py-1.5 cursor-pointer text-sm group ${
-              item.id === activeId? 'bg-blue-600' : 'hover:bg-gray-800'
-            }`}
+            className={`tree-item ${item.id === activeId? 'active' : ''}`}
             style={{ paddingLeft: `${depth * 12 + 24}px` }}
           >
-            <span className="text-xs">{icon}</span>
-            <span className="truncate flex-1">{name}</span>
+            <span style={{fontSize: '11px'}}>{icon}</span>
+            <span style={{flex: 1, overflow: 'hidden', textOverflow: 'ellipsis'}}>{name}</span>
             <button
               onClick={(e) => { e.stopPropagation(); deleteFile(item.id) }}
-              className="opacity-0 group-hover:opacity-100 hover:bg-gray-700 rounded p-0.5"
+              className="delete-btn"
             >
-              <X className="w-3 h-3" />
+              <X style={{width: '12px', height: '12px'}} />
             </button>
           </div>
         )
@@ -540,12 +532,11 @@ export default function HyecodeEditor() {
     <!DOCTYPE html>
     <html>
     <head>
-      <script src="https://cdn.tailwindcss.com"></script>
       <script type="importmap">
         {"imports": {"react": "https://esm.sh/react@18", "react-dom": "https://esm.sh/react-dom@18/client"}}
       </script>
     </head>
-    <body class="bg-black">
+    <body style="margin:0; background:#000;">
       <div id="root"></div>
       <script type="module">
         import React from 'react'
@@ -557,24 +548,24 @@ export default function HyecodeEditor() {
     </html>
   `
 
-  const tree = buildTree(files)
+  const tree = buildTree()
   const filteredFiles = files.filter(f => f.name.toLowerCase().includes(search.toLowerCase()))
 
   if (authLoading) {
-    return <div className="h-screen w-screen bg-black text-white flex items-center justify-center">Loading...</div>
+    return <div className="loading">Loading...</div>
   }
 
   if (!user &&!isGuest) {
     return (
-      <div className="h-screen w-screen bg-[#0a0a0a] text-white flex items-center justify-center p-4">
-        <div className="bg-[#1a1a1a] border border-gray-800 rounded-lg p-8 w-full max-w-sm">
-          <div className="flex items-center gap-2 mb-6 justify-center">
-            <Code2 className="w-6 h-6 text-blue-500" />
-            <h1 className="text-2xl font-bold">HYE Editor</h1>
+      <div className="login">
+        <div className="login-box">
+          <div className="login-header">
+            <Code2 style={{width: '24px', height: '24px', color: '#58a6ff'}} />
+            <h1>HYE Editor</h1>
           </div>
           {errorMsg && (
-            <div className="mb-4 p-3 bg-red-900/30 border border-red-800 rounded text-sm text-red-400 flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <div className="error-bar" style={{marginBottom: '16px', borderRadius: '6px', border: '1px solid #f85149'}}>
+              <AlertCircle style={{width: '16px', height: '16px', flexShrink: 0}} />
               <span>{errorMsg}</span>
             </div>
           )}
@@ -583,183 +574,190 @@ export default function HyecodeEditor() {
             placeholder="Email"
             value={email}
             onChange={e => setEmail(e.target.value)}
-            className="w-full bg-[#0a0a0a] border border-gray-800 rounded p-3 mb-3 text-sm focus:outline-none focus:border-blue-500"
+            className="input"
           />
           <input
             type="password"
             placeholder="Password"
             value={password}
             onChange={e => setPassword(e.target.value)}
-            className="w-full bg-[#0a0a0a] border border-gray-800 rounded p-3 mb-4 text-sm focus:outline-none focus:border-blue-500"
+            className="input"
           />
-          <button onClick={handleLogin} className="w-full bg-blue-600 hover:bg-blue-700 py-2 rounded mb-2 text-sm font-medium">
+          <button onClick={handleLogin} className="btn btn-primary">
             Login
           </button>
-          <button onClick={handleSignup} className="w-full bg-gray-800 hover:bg-gray-700 py-2 rounded mb-2 text-sm font-medium">
+          <button onClick={handleSignup} className="btn">
             Sign Up
           </button>
-          <button onClick={handleGuest} className="w-full bg-green-600 hover:bg-green-700 py-2 rounded text-sm font-medium">
+          <button onClick={handleGuest} className="btn" style={{background: '#238636', borderColor: '#238636'}}>
             Continue as Guest
           </button>
-          <p className="text-xs text-gray-500 mt-4 text-center">Guest mode saves locally only</p>
+          <p className="login-text">Guest mode saves locally only</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="h-screen w-screen bg-[#0a0a0a] text-white flex flex-col overflow-hidden">
-      <div className="h-12 bg-[#1a1a1a] border-b border-gray-800 flex items-center justify-between px-3 shrink-0">
-        <div className="flex items-center gap-3">
-          <button onClick={() => setSidebar(!sidebar)} className="p-1.5 hover:bg-gray-800 rounded">
-            <Menu className="w-5 h-5" />
+    <div className="app">
+      <header className="header">
+        <div className="header-left">
+          <button onClick={() => setSidebar(!sidebar)} className="btn btn-icon">
+            <Menu style={{width: '20px', height: '20px'}} />
           </button>
-          <Code2 className="w-5 h-5 text-blue-500" />
-          <span className="font-bold">HYE</span>
-          {online? <Wifi className="w-4 h-4 text-green-500" /> : <WifiOff className="w-4 h-4 text-red-500" />}
-          <span className="text-xs text-gray-400">{status}</span>
+          <div className="logo">
+            <Code2 style={{width: '20px', height: '20px'}} />
+            <span>HYE</span>
+          </div>
+          <div className="badge">
+            {online? <Wifi style={{width: '14px', height: '14px'}} /> : <WifiOff style={{width: '14px', height: '14px'}} />}
+            <span>local</span>
+          </div>
+          <span className="status-text">{status}</span>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="relative">
-            <Search className="w-4 h-4 absolute left-2 top-2 text-gray-500" />
+        <div className="header-right">
+          <div className="search-wrap">
+            <Search className="search-icon" />
             <input
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search files..."
-              className="bg-[#0a0a0a] border border-gray-800 rounded pl-8 pr-3 py-1.5 text-sm w-40 focus:outline-none focus:border-blue-500"
+              className="input"
             />
           </div>
 
-          <button onClick={() => setView(view === 'code'? 'preview' : 'code')} className="px-3 py-1.5 bg-gray-800 hover:bg-gray-700 rounded text-sm flex items-center gap-2">
-            {view === 'code'? <><Eye className="w-4 h-4" /> Preview</> : <><Code2 className="w-4 h-4" /> Code</>}
+          <button onClick={() => setView(view === 'code'? 'preview' : 'code')} className="btn">
+            {view === 'code'? <><Eye style={{width: '16px', height: '16px'}} /> Preview</> : <><Code2 style={{width: '16px', height: '16px'}} /> Code</>}
           </button>
 
-          <div className="relative">
-            <button onClick={() => setMenu(!menu)} className="p-1.5 bg-gray-800 hover:bg-gray-700 rounded">
-              <Settings className="w-5 h-5" />
+          <div className="menu-wrap">
+            <button onClick={() => setMenu(!menu)} className="btn btn-icon">
+              <Settings style={{width: '20px', height: '20px'}} />
             </button>
 
             {menu && (
               <>
-                <div className="fixed inset-0 z-10" onClick={() => setMenu(false)} />
-                <div className="absolute right-0 top-10 bg-[#1a1a1a] border border-gray-800 rounded-lg shadow-2xl py-2 w-64 z-20 max-h-96 overflow-y-auto">
-                  <div className="px-3 py-2 text-xs text-gray-500 font-bold border-b border-gray-800 flex items-center gap-2">
-                    <User className="w-3 h-3" /> {user?.email || 'Guest'}
+                <div className="menu-overlay" onClick={() => setMenu(false)} />
+                <div className="menu-dropdown">
+                  <div className="menu-section" style={{display: 'flex', alignItems: 'center', gap: '6px', borderBottom: '1px solid #30363d', paddingBottom: '8px', marginBottom: '4px'}}>
+                    <User style={{width: '12px', height: '12px'}} /> {user?.email || 'Guest'}
                   </div>
 
-                  <div className="px-3 py-2 text-xs text-gray-500 font-bold">FIX TOOLS</div>
+                                    <div className="menu-section">FIX TOOLS</div>
                   
-                  <button onClick={handleLocalFix} disabled={fixing} className="w-full px-3 py-2 hover:bg-gray-800 text-left text-sm flex items-center gap-2 disabled:opacity-50">
-                    <Zap className="w-4 h-4 text-yellow-400" /> Local Fix
+                  <button onClick={handleLocalFix} disabled={fixing} className="menu-item">
+                    <Zap style={{width: '16px', height: '16px', color: '#f0b90b'}} /> Local Fix
                   </button>
                   
-                  <button onClick={handleOnlineFix} disabled={fixing} className="w-full px-3 py-2 hover:bg-gray-800 text-left text-sm flex items-center gap-2 disabled:opacity-50">
-                    <Wifi className="w-4 h-4 text-green-400" /> Online Fix
+                  <button onClick={handleOnlineFix} disabled={fixing} className="menu-item">
+                    <Wifi style={{width: '16px', height: '16px', color: '#3fb950'}} /> Online Fix
                   </button>
                   
-                  <button onClick={handleAiFix} disabled={fixing} className="w-full px-3 py-2 hover:bg-gray-800 text-left text-sm flex items-center gap-2 disabled:opacity-50">
-                    <Wand2 className="w-4 h-4 text-purple-400" /> AI Fix
+                  <button onClick={handleAiFix} disabled={fixing} className="menu-item">
+                    <Wand2 style={{width: '16px', height: '16px', color: '#a371f7'}} /> AI Fix
                   </button>
                   
-                  <button onClick={() => { setAiOpen(true); setMenu(false) }} className="w-full px-3 py-2 hover:bg-gray-800 text-left text-sm flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-blue-400" /> AI Build
+                  <button onClick={() => { setAiOpen(true); setMenu(false) }} className="menu-item">
+                    <Sparkles style={{width: '16px', height: '16px', color: '#58a6ff'}} /> AI Build
                   </button>
                   
-                  <div className="px-3 py-2 text-xs text-gray-500 font-bold border-t border-gray-800 mt-1">FILES</div>
-                  <button onClick={newFile} className="w-full px-3 py-2 hover:bg-gray-800 text-left text-sm flex items-center gap-2">
-                    <FilePlus className="w-4 h-4" /> New File
+                  <div className="menu-divider"></div>
+                  <div className="menu-section">FILES</div>
+                  <button onClick={newFile} className="menu-item">
+                    <FilePlus style={{width: '16px', height: '16px'}} /> New File
                   </button>
-                  <button onClick={newFolder} className="w-full px-3 py-2 hover:bg-gray-800 text-left text-sm flex items-center gap-2">
-                    <FolderPlus className="w-4 h-4" /> New Folder
+                  <button onClick={newFolder} className="menu-item">
+                    <FolderPlus style={{width: '16px', height: '16px'}} /> New Folder
                   </button>
 
-                  <div className="px-3 py-2 text-xs text-gray-500 font-bold border-t border-gray-800 mt-1">HYE ECOSYSTEM</div>
-                  <button onClick={openTerminal} className="w-full px-3 py-2 hover:bg-gray-800 text-left text-sm flex items-center gap-2">
-                    <Terminal className="w-4 h-4 text-green-400" /> HYE Terminal
+                  <div className="menu-divider"></div>
+                  <div className="menu-section">HYE ECOSYSTEM</div>
+                  <button onClick={openTerminal} className="menu-item">
+                    <Terminal style={{width: '16px', height: '16px', color: '#3fb950'}} /> HYE Terminal
                   </button>
-                  <button onClick={openMarketplace} className="w-full px-3 py-2 hover:bg-gray-800 text-left text-sm flex items-center gap-2">
-                    <Store className="w-4 h-4 text-purple-400" /> HYE Marketplace
-                  </button>
-
-                  <div className="px-3 py-2 text-xs text-gray-500 font-bold border-t border-gray-800 mt-1">EXPORT</div>
-                  <button onClick={exportProject} className="w-full px-3 py-2 hover:bg-gray-800 text-left text-sm flex items-center gap-2">
-                    <Download className="w-4 h-4" /> Export Project
+                  <button onClick={openMarketplace} className="menu-item">
+                    <Store style={{width: '16px', height: '16px', color: '#a371f7'}} /> HYE Marketplace
                   </button>
 
-                  <div className="px-3 py-2 text-xs text-gray-500 font-bold border-t border-gray-800 mt-1">ACCOUNT</div>
-                  <button onClick={handleLogout} className="w-full px-3 py-2 hover:bg-gray-800 text-left text-sm flex items-center gap-2 text-red-400">
-                    <LogOut className="w-4 h-4" /> Sign Out
+                  <div className="menu-divider"></div>
+                  <div className="menu-section">EXPORT</div>
+                  <button onClick={exportProject} className="menu-item">
+                    <Download style={{width: '16px', height: '16px'}} /> Export Project
+                  </button>
+
+                  <div className="menu-divider"></div>
+                  <div className="menu-section">ACCOUNT</div>
+                  <button onClick={handleLogout} className="menu-item" style={{color: '#f85149'}}>
+                    <LogOut style={{width: '16px', height: '16px'}} /> Sign Out
                   </button>
                 </div>
               </>
             )}
           </div>
         </div>
-      </div>
+      </header>
 
       {errorMsg && (
-        <div className="bg-red-900/30 border-b border-red-800 px-4 py-2 text-sm text-red-400 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4" />
-          <span className="flex-1">{errorMsg}</span>
-          <button onClick={() => setErrorMsg('')} className="hover:bg-red-800 rounded p-1">
-            <X className="w-3 h-3" />
+        <div className="error-bar">
+          <AlertCircle style={{width: '16px', height: '16px'}} />
+          <span style={{flex: 1}}>{errorMsg}</span>
+          <button onClick={() => setErrorMsg('')} className="btn btn-icon" style={{border: 'none', padding: '2px'}}>
+            <X style={{width: '12px', height: '12px'}} />
           </button>
         </div>
       )}
 
       {fixMethod && (
-        <div className="bg-blue-900/30 border-b border-blue-800 px-4 py-2 text-sm text-blue-400 flex items-center gap-2">
-          <Zap className="w-4 h-4" />
+        <div className="fix-bar">
+          <Zap style={{width: '16px', height: '16px'}} />
           <span>{fixMethod}</span>
         </div>
       )}
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="main-wrap">
         {sidebar && (
-          <div className="w-64 bg-[#1a1a1a] border-r border-gray-800 flex flex-col">
-            <div className="p-2 border-b border-gray-800 flex items-center justify-between">
-              <span className="text-xs font-bold text-gray-400">EXPLORER</span>
-              <div className="flex gap-1">
-                <button onClick={newFile} className="p-1 hover:bg-gray-800 rounded">
-                  <FilePlus className="w-4 h-4" />
+          <aside className="sidebar">
+            <div className="sidebar-header">
+              <span>EXPLORER</span>
+              <div className="sidebar-actions">
+                <button onClick={newFile} className="btn btn-icon">
+                  <FilePlus style={{width: '16px', height: '16px'}} />
                 </button>
-                <button onClick={newFolder} className="p-1 hover:bg-gray-800 rounded">
-                  <FolderPlus className="w-4 h-4" />
+                <button onClick={newFolder} className="btn btn-icon">
+                  <FolderPlus style={{width: '16px', height: '16px'}} />
                 </button>
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto py-2">
+            <div className="sidebar-content">
               {renderTree(tree)}
             </div>
-          </div>
+          </aside>
         )}
 
-        <div className="flex-1 flex flex-col min-w-0">
-          <div className="h-10 bg-[#1a1a1a] border-b border-gray-800 flex items-center overflow-x-auto shrink-0">
+        <div className="editor-wrap">
+          <div className="tabs">
             {files.map(f => (
               <div
                 key={f.id}
                 onClick={() => setActiveId(f.id)}
-                className={`flex items-center gap-2 px-4 h-full border-r border-gray-800 cursor-pointer text-sm whitespace-nowrap ${
-                  f.id === activeId? 'bg-[#0a0a0a] text-white' : 'text-gray-400 hover:text-white hover:bg-[#252525]'
-                }`}
+                className={`tab ${f.id === activeId? 'active' : ''}`}
               >
                 <span>{f.name}</span>
-                <button onClick={(e) => { e.stopPropagation(); deleteFile(f.id) }} className="hover:bg-gray-700 rounded p-0.5">
-                  <X className="w-3 h-3" />
+                <button onClick={(e) => { e.stopPropagation(); deleteFile(f.id) }} className="btn btn-icon" style={{border: 'none', padding: '2px', width: '16px', height: '16px'}}>
+                  <X style={{width: '12px', height: '12px'}} />
                 </button>
               </div>
             ))}
           </div>
 
-          <div className="flex-1 bg-[#0a0a0a] overflow-hidden">
+          <div className="editor-area">
             {view === 'code'? (
               <Editor
                 height="600px"
                 width="100%"
                 path={activeFile?.name}
-                                language={activeFile?.lang || 'javascript'}
+                language={activeFile?.lang || 'javascript'}
                 value={activeFile?.content || ''}
                 onChange={updateContent}
                 onMount={(editor) => {
@@ -767,7 +765,7 @@ export default function HyecodeEditor() {
                   setTimeout(() => editor.layout(), 100)
                 }}
                 theme="vs-dark"
-                loading={<div className="p-4 text-gray-400">Loading editor...</div>}
+                loading={<div style={{padding: '16px', color: '#7d8590'}}>Loading editor...</div>}
                 options={{
                   fontSize: 14,
                   fontFamily: 'JetBrains Mono, Menlo, monospace',
@@ -782,7 +780,7 @@ export default function HyecodeEditor() {
             ) : (
               <iframe
                 srcDoc={previewCode}
-                className="w-full h-full bg-white"
+                className="preview-frame"
                 sandbox="allow-scripts allow-same-origin"
               />
             )}
@@ -790,29 +788,28 @@ export default function HyecodeEditor() {
         </div>
       </div>
 
-      {/* AI Modal */}
       {aiOpen && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#1a1a1a] border border-gray-800 rounded-lg p-6 w-full max-w-lg">
-            <div className="flex items-center gap-2 mb-4">
-              <Sparkles className="w-5 h-5 text-blue-400" />
-              <h3 className="text-lg font-bold">AI Builder</h3>
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
+              <Sparkles style={{width: '20px', height: '20px', color: '#58a6ff'}} />
+              <h3>AI Builder</h3>
             </div>
             <textarea
               value={aiPrompt}
               onChange={e => setAiPrompt(e.target.value)}
               placeholder="Describe what you want to build... e.g. 'todo app with localStorage' or 'login form with validation'"
-              className="w-full h-32 bg-[#0a0a0a] border border-gray-800 rounded p-3 text-sm resize-none focus:outline-none focus:border-blue-500"
             />
-            <div className="flex gap-2 mt-4">
+            <div className="modal-actions">
               <button
                 onClick={aiBuild}
                 disabled={aiLoading}
-                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 py-2 rounded text-sm font-medium"
+                className="btn btn-primary"
+                style={{flex: 1}}
               >
                 {aiLoading? 'Building...' : 'Generate'}
               </button>
-              <button onClick={() => setAiOpen(false)} className="px-4 bg-gray-800 hover:bg-gray-700 py-2 rounded text-sm">
+              <button onClick={() => setAiOpen(false)} className="btn">
                 Cancel
               </button>
             </div>
