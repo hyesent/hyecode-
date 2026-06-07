@@ -101,6 +101,37 @@ export default function HyecodeEditor() {
       if (session?.user) loadCloudFiles(session.user.id)
       else loadLocalFiles()
     })
+    useEffect(() => {
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    setUser(session?.user?? null)
+    setAuthLoading(false)
+    if (session?.user) loadCloudFiles(session.user.id)
+    else loadLocalFiles()
+  })
+
+  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    setUser(session?.user?? null)
+    if (session?.user) loadCloudFiles(session.user.id)
+  })
+
+  return () => subscription.unsubscribe()
+}, [])
+
+// ADD THIS NEW useEffect HERE 👇 - DON'T MIX WITH THE ONE ABOVE
+useEffect(() => {
+  if (!user &&!isGuest) return
+  
+  const userId = user?.id || 'guest'
+  const ws = new WebSocket(`wss://hye-api.onrender.com/ws/terminal/${userId}`)
+  
+  ws.onmessage = (e) => {
+    if (e.data === "__HYE_SYNC__") {
+      loadWorkspaceFiles(userId)
+    }
+  }
+  
+  return () => ws.close()
+}, [user, isGuest])
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user?? null)
@@ -143,31 +174,27 @@ export default function HyecodeEditor() {
     }
   }
 
-  const saveToCloud = async () => {
-    if (!user || isGuest ||!online) return
-
-    setStatus('saving...')
-    try {
-      for (let f of files) {
-        await supabase.from('files').upsert({
-          id: f.id,
-          user_id: user.id,
-          name: f.name,
-          path: f.path,
-          content: f.content,
-          lang: f.lang
-        })
-      }
-      setStatus('saved')
-      setDirty(false)
-      setErrorMsg('')
-      setTimeout(() => setStatus('ready'), 2000)
-    } catch (e) {
-      setErrorMsg('Save failed: ' + e.message)
-      setStatus('save failed')
+  
+    const saveToCloud = async () => {
+  if (!user || isGuest ||!online) return
+  const userId = user.id
+  
+  setStatus('saving...')
+  try {
+    for (let f of files) {
+      await fetch(`${API}/workspace/${userId}/save`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({path: f.path, content: f.content})
+      })
     }
+    setStatus('saved')
+    setDirty(false)
+    setTimeout(() => setStatus('ready'), 2000)
+  } catch (e) {
+    setErrorMsg('Save failed: ' + e.message)
   }
-
+}
   useEffect(() => {
     if (dirty) {
       clearTimeout(saveTimeout.current)
@@ -248,7 +275,35 @@ export default function HyecodeEditor() {
     setFiles(newFiles)
     if (id === activeId) setActiveId(newFiles[0].id)
   }
-
+// Add this with your other functions - NOT inside useEffect
+const loadWorkspaceFiles = async (userId) => {
+  try {
+    const res = await fetch(`${API}/workspace/${userId}/files`)
+    const data = await res.json()
+    
+    const loadedFiles = await Promise.all(
+      data.files.map(async (f, idx) => {
+        const contentRes = await fetch(`${API}/workspace/${userId}/file?path=${f.path}`)
+        const contentData = await contentRes.json()
+        return {
+          id: Date.now() + idx,
+          name: f.name,
+          path: f.path,
+          content: contentData.content,
+          lang: f.name.split('.').pop() === 'jsx'? 'javascript' : 'plaintext'
+        }
+      })
+    )
+    
+    if (loadedFiles.length > 0) {
+      setFiles(loadedFiles)
+      setActiveId(loadedFiles[0].id)
+      setStatus('synced with terminal')
+    }
+  } catch (e) {
+    console.log('Sync failed:', e)
+  }
+}
   const newFolder = () => {
     const name = prompt('Folder name:')
     if (name) {
