@@ -1,5 +1,11 @@
 {
-  "appId": "com.hye.editor",
-  "appName": "hyecodeeditor",
-  "webDir": "dist"
+  "appId": "com.yourname.codeeditor",
+  "appName": "CodeEditor",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "plugins": {
+    "Filesystem": {
+      "android": {}
+    }
+  }
 }

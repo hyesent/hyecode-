@@ -700,9 +700,13 @@ const HyeEditorCore = ({ session }) => {
           <div className="tabs">
             {files.map(f => (
               <div key={f.id} className={`tab ${activeId === f.id? 'active' : ''}`} onClick={() => setActiveId(f.id)}>
+
                 {f.name}
                 {dirtyFiles.has(f.id) && '•'}
                 {files.length > 1 && <X size={12} onClick={(e) => { e.stopPropagation(); deleteFile(f.id) }} />}
+
+                {f.name} {dirtyFiles.has(f.id) && '•'} {files.length > 1 && <X size={12} onClick={(e) => { e.stopPropagation(); deleteFile(f.id) }} />}
+
               </div>
             ))}
           </div>
