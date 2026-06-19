@@ -120,7 +120,26 @@ const HyeEditorCore = ({ session }) => {
   const iframeRef = useRef(null)
   const saveTimeoutRef = useRef(null)
   const isNative = Capacitor.getPlatform()!== 'web'
-
+useEffect(() => {
+  const wakeBackend = async () => {
+    try {
+      setStatus('waking AI...')
+      await fetch('https://hye-api.onrender.com/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: 'ping',
+          type: 'ask'
+        })
+      })
+      setStatus('AI ready')
+      setTimeout(() => setStatus('ready'), 2000)
+    } catch (e) {
+      setStatus('AI sleeping - will wake on first use')
+    }
+  }
+  wakeBackend()
+}, [])
   useEffect(() => {
     initFiles()
     return () => clearTimeout(saveTimeoutRef.current)
@@ -412,85 +431,85 @@ const HyeEditorCore = ({ session }) => {
   }
 
   const searchTemplateAI = async () => {
-    if (!templateInput.trim()) return
-    setStatus('HYE AI generating...')
-    setTemplateResult(null)
-    try {
-      const res = await fetch('https://hye-api.onrender.com/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: `Generate React code template for: ${templateInput}. Return only code.`,
-          type: 'template'
-        })
+  if (!templateInput.trim()) return
+  setStatus('HYE AI generating...')
+  setTemplateResult(null)
+  try {
+    const res = await fetch('https://hye-api.onrender.com/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: `Generate React code template for: ${templateInput}. Return only code.`,
+        type: 'template'
       })
-      const data = await res.json()
-      setTemplateResult({
-        name: `AI: ${templateInput}`,
-        code: data.code || data.result || '// AI returned no code',
-        desc: data.explanation || `AI generated`,
-        source: 'ai'
-      })
-      setStatus('ready')
-    } catch (e) {
-      setTemplateResult({ name: 'Error', code: `// AI failed: ${e.message}`, desc: 'Check backend' })
-      setStatus('error')
-    }
+    })
+    const data = await res.json()
+    setTemplateResult({
+      name: `AI: ${templateInput}`,
+      code: data.code || '// AI returned no code',
+      desc: data.explanation || `AI generated`,
+      source: 'ai'
+    })
+    setStatus('ready')
+  } catch (e) {
+    setTemplateResult({ name: 'Error', code: `// AI failed: ${e.message}`, desc: 'Check backend' })
+    setStatus('error')
   }
+}
 
-  const searchHelpAI = async () => {
-    if (!helpInput.trim()) return
-    setStatus('HYE AI generating...')
-    setHelpResult(null)
-    try {
-      const res = await fetch('https://hye-api.onrender.com/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: `Give syntax example for: ${helpInput}. Return code + comment.`,
-          type: 'help'
-        })
+const searchHelpAI = async () => {
+  if (!helpInput.trim()) return
+  setStatus('HYE AI generating...')
+  setHelpResult(null)
+  try {
+    const res = await fetch('https://hye-api.onrender.com/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: `Give syntax example for: ${helpInput}. Return code + comment.`,
+        type: 'help'
       })
-      const data = await res.json()
-      setHelpResult({
-        name: `AI: ${helpInput}`,
-        code: data.code || data.result || '// AI returned no code',
-        desc: data.explanation || `AI syntax help`,
-        source: 'ai'
-      })
-      setStatus('ready')
-    } catch (e) {
-      setHelpResult({ name: 'Error', code: `// AI failed: ${e.message}`, desc: 'Check backend' })
-      setStatus('error')
-    }
+    })
+    const data = await res.json()
+    setHelpResult({
+      name: `AI: ${helpInput}`,
+      code: data.code || '// AI returned no code',
+      desc: data.explanation || `AI syntax help`,
+      source: 'ai'
+    })
+    setStatus('ready')
+  } catch (e) {
+    setHelpResult({ name: 'Error', code: `// AI failed: ${e.message}`, desc: 'Check backend' })
+    setStatus('error')
   }
+}
 
-  const searchAskAI = async () => {
-    if (!askInput.trim()) return
-    setStatus('HYE AI thinking...')
-    setAskResult(null)
-    try {
-      const res = await fetch('https://hye-api.onrender.com/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: `Explain ${askInput} in React. Short + 1 code example.`,
-          type: 'ask'
-        })
+const searchAskAI = async () => {
+  if (!askInput.trim()) return
+  setStatus('HYE AI thinking...')
+  setAskResult(null)
+  try {
+    const res = await fetch('https://hye-api.onrender.com/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt: `Explain ${askInput} in React. Short + 1 code example.`,
+        type: 'ask'
       })
-      const data = await res.json()
-      setAskResult({
-        name: `AI: ${askInput}`,
-        code: data.code || data.example || `// ${data.result}`,
-        desc: data.explanation || data.result || 'AI explanation',
-        source: 'ai'
-      })
-      setStatus('ready')
-    } catch (e) {
-      setAskResult({ name: 'Error', code: `// AI failed: ${e.message}`, desc: 'Check backend' })
-      setStatus('error')
-    }
+    })
+    const data = await res.json()
+    setAskResult({
+      name: `AI: ${askInput}`,
+      code: data.code || `// ${data.result}`,
+      desc: data.explanation || data.result || 'AI explanation',
+      source: 'ai'
+    })
+    setStatus('ready')
+  } catch (e) {
+    setAskResult({ name: 'Error', code: `// AI failed: ${e.message}`, desc: 'Check backend' })
+    setStatus('error')
   }
+              }
 
   const runPreview = () => {
     const htmlFile = files.find(f => f.name === 'index.html')
