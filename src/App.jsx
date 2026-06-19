@@ -1021,6 +1021,9 @@ const searchAskAI = async () => {
                 <div className="modal-result-desc">{askResult.desc}</div>
                 <pre>{askResult.code}</pre>
                 <div className="modal-actions">
+                  <button onClick={() => copyToClipboard(askResult.code)}>
+                    <Copy size={14} /> Copy Code
+                  </button>
                   <button onClick={() => copyToClipboard(askResult.desc)}>
                     <Copy size={14} /> Copy Explanation
                   </button>
