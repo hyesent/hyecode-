@@ -724,8 +724,7 @@ const searchAskAI = async () => {
                 {dirtyFiles.has(f.id) && '•'}
                 {files.length > 1 && <X size={12} onClick={(e) => { e.stopPropagation(); deleteFile(f.id) }} />}
 
-                {f.name} {dirtyFiles.has(f.id) && '•'} {files.length > 1 && <X size={12} onClick={(e) => { e.stopPropagation(); deleteFile(f.id) }} />}
-
+                
               </div>
             ))}
           </div>
