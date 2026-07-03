@@ -8,13 +8,15 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: write   # Needed to update the latest release
+
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'       # Capacitor requires >=22
           cache: 'npm'
 
       - run: npm ci
@@ -23,8 +25,8 @@ jobs:
 
       - uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          java-version: '21'       # Capacitor 6+ needs Java 21
+          distribution: 'zulu'     # More reliable on GitHub runners
           cache: 'gradle'
 
       - name: Install Capacitor Filesystem
@@ -39,7 +41,24 @@ jobs:
       - name: Build Debug APK
         run: cd android && ./gradlew assembleDebug --stacktrace
 
-      - uses: actions/upload-artifact@v4
+      - name: Rename APK to HyecodeEditor.apk
+        run: mv android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/HyecodeEditor.apk
+
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: code-editor-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: HyecodeEditor
+          path: android/app/build/outputs/apk/debug/HyecodeEditor.apk
+
+      - name: Upload APK to Latest Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Hyecode Editor – Latest Build"
+          prerelease: true
+          draft: false
+          files: android/app/build/outputs/apk/debug/HyecodeEditor.apk
+          allowUpdates: true
+          replacesArtifacts: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
