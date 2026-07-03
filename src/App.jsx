@@ -1,15 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react'
+qimport React, { useState, useEffect, useRef } from 'react'
 import Editor from '@monaco-editor/react'
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
 import { Capacitor } from '@capacitor/core'
 import { FilePicker } from '@capawesome/capacitor-file-picker'
-import { Menu, Plus, FolderPlus, Edit3, X, Search, Wand2, FileCode, BookOpen, HelpCircle, Terminal, Copy, AlertCircle, ChevronRight, ChevronDown, LogOut, Upload } from 'lucide-react'
+import { Menu, Plus, FolderPlus, Edit3, X, Search, Wand2, FileCode, BookOpen, HelpCircle, Terminal, Copy, AlertCircle, ChevronRight, ChevronDown, LogOut, Upload, FolderOpen, User } from 'lucide-react'
 import { createClient } from '@supabase/supabase-js'
 import { templates } from './templates.js'
 import { syntaxHelp } from './syntaxHelp.js'
 import { terms } from './terms.js'
 
-const ROOT = 'HYE'
 const FILE_EXT = ['.js', '.jsx', '.ts', '.tsx', '.html', '.css', '.json', '.md', '.txt']
 
 const supabase = createClient(
@@ -17,6 +16,7 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 )
 
+// ---------- Login Screen (unchanged) ----------
 const LoginScreen = ({ onLogin }) => {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -84,6 +84,7 @@ const LoginScreen = ({ onLogin }) => {
   )
 }
 
+// ---------- Main Editor Component ----------
 const HyeEditorCore = ({ session }) => {
   const [files, setFiles] = useState([])
   const [activeId, setActiveId] = useState(null)
@@ -96,6 +97,9 @@ const HyeEditorCore = ({ session }) => {
   const [autoSave, setAutoSave] = useState(true)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [showPreview, setShowPreview] = useState(false)
+  const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [workspaceRoot, setWorkspaceRoot] = useState(null)
+
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [showHelpModal, setShowHelpModal] = useState(false)
   const [showAskModal, setShowAskModal] = useState(false)
@@ -119,101 +123,134 @@ const HyeEditorCore = ({ session }) => {
   const monacoRef = useRef(null)
   const iframeRef = useRef(null)
   const saveTimeoutRef = useRef(null)
-  const isNative = Capacitor.getPlatform()!== 'web'
-useEffect(() => {
-  const wakeBackend = async () => {
-    try {
-      setStatus('waking AI...')
-      await fetch('https://hye-api.onrender.com/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: 'ping',
-          type: 'ask'
-        })
-      })
-      setStatus('AI ready')
-      setTimeout(() => setStatus('ready'), 2000)
-    } catch (e) {
-      setStatus('AI sleeping - will wake on first use')
-    }
-  }
-  wakeBackend()
-}, [])
+  const isNative = Capacitor.getPlatform() !== 'web'
+
+  // Wake backend
   useEffect(() => {
-    initFiles()
-    return () => clearTimeout(saveTimeoutRef.current)
+    const wakeBackend = async () => {
+      try {
+        setStatus('waking AI...')
+        await fetch('https://hye-api.onrender.com/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: 'ping', type: 'ask' })
+        })
+        setStatus('AI ready')
+        setTimeout(() => setStatus('ready'), 2000)
+      } catch (e) {
+        setStatus('AI sleeping')
+      }
+    }
+    wakeBackend()
   }, [])
 
+  // Auto-save
   useEffect(() => {
     if (activeId && autoSave) {
       clearTimeout(saveTimeoutRef.current)
       saveTimeoutRef.current = setTimeout(() => saveFile(activeId), 2000)
     }
-  }, [files, activeId])
+  }, [files, activeId, autoSave])
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-  }
-
-  const initFiles = async () => {
+  // ---------- Workspace Functions ----------
+  const openFolder = async () => {
+    setStatus('picking folder...')
     try {
-      await Filesystem.mkdir({ path: ROOT, directory: Directory.Documents, recursive: true })
-      await loadFiles()
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.webkitdirectory = true
+      input.multiple = true
+      input.accept = '*/*'
+
+      const fileList = await new Promise((resolve, reject) => {
+        input.onchange = (e) => resolve(e.target.files)
+        input.oncancel = () => reject(new Error('canceled'))
+        input.click()
+      })
+
+      if (!fileList || fileList.length === 0) {
+        setStatus('no folder picked')
+        return
+      }
+
+      const firstPath = fileList[0].webkitRelativePath
+      const folderName = firstPath.split('/')[0]
+
+      setWorkspaceRoot(folderName)
+      setStatus(`opened: ${folderName}`)
+
+      // Load files from that folder
+      await loadWorkspace(folderName)
     } catch (e) {
-      const defaultFiles = [
-        { id: 1, name: 'App.jsx', path: '/App.jsx', content: `import React from "react"\nexport default function App() {\n return <div>Hello HYE</div>\n}` },
-        { id: 2, name: 'index.html', path: '/index.html', content: `<!DOCTYPE html>\n<html><body><div id="root"></div></body></html>` }
-      ]
-      setFiles(defaultFiles)
-      setActiveId(1)
+      if (e.message !== 'canceled') {
+        setStatus('open folder failed')
+      }
     }
   }
 
-  const loadFiles = async () => {
+  const closeProject = () => {
+    setWorkspaceRoot(null)
+    setFiles([])
+    setActiveId(null)
+    setExpandedFolders(new Set(['/']))
+    setStatus('ready')
+  }
+
+  const loadWorkspace = async (folderName) => {
     try {
       const scan = async (path = '') => {
-        const items = await Filesystem.readdir({ path: ROOT + path, directory: Directory.Documents })
+        const items = await Filesystem.readdir({
+          path: path,
+          directory: Directory.ExternalStorage
+        })
         const result = []
         for (const item of items.files) {
-          const fullPath = path + '/' + item.name
+          const fullPath = path ? `${path}/${item.name}` : item.name
           if (item.type === 'directory') {
             result.push(...await scan(fullPath))
           } else if (FILE_EXT.some(ext => item.name.endsWith(ext))) {
-            const content = await Filesystem.readFile({ path: ROOT + fullPath, directory: Directory.Documents, encoding: Encoding.UTF8 })
-            result.push({ id: Date.now() + Math.random(), name: item.name, path: fullPath, content: content.data })
+            const content = await Filesystem.readFile({
+              path: fullPath,
+              directory: Directory.ExternalStorage,
+              encoding: Encoding.UTF8
+            })
+            result.push({
+              id: Date.now() + Math.random(),
+              name: item.name,
+              path: fullPath,
+              content: content.data
+            })
           }
         }
         return result
       }
-      const loaded = await scan()
-      if (loaded.length > 0) {
-        setFiles(loaded)
-        setActiveId(loaded[0].id)
-      } else {
-        throw new Error('No files')
-      }
+
+      const loaded = await scan(folderName)
+      setFiles(loaded)
+      if (loaded.length > 0) setActiveId(loaded[0].id)
     } catch (e) {
-      const defaultFiles = [
-        { id: 1, name: 'App.jsx', path: '/App.jsx', content: `import React from "react"\nexport default function App() {\n return <div>Hello HYE</div>\n}` }
-      ]
-      setFiles(defaultFiles)
-      setActiveId(1)
+      setStatus('load workspace failed')
+      console.error(e)
     }
   }
 
+  // ---------- File Operations ----------
   const saveFile = async (fileId) => {
     const file = files.find(f => f.id === fileId)
-    if (!file) return
+    if (!file || !workspaceRoot) return
     try {
       await Filesystem.writeFile({
-        path: ROOT + file.path,
+        path: file.path,
         data: file.content,
-        directory: Directory.Documents,
+        directory: Directory.ExternalStorage,
         encoding: Encoding.UTF8,
         recursive: true
       })
-      setDirtyFiles(prev => { const n = new Set(prev); n.delete(fileId); return n })
+      setDirtyFiles(prev => {
+        const n = new Set(prev)
+        n.delete(fileId)
+        return n
+      })
       setStatus('saved')
       setTimeout(() => setStatus('ready'), 1000)
     } catch (e) {
@@ -222,80 +259,63 @@ useEffect(() => {
   }
 
   const createFile = async () => {
-    if (!newItemName.trim()) return
-    const name = newItemName.match(/\.(jsx?|html|css|json|md|txt)$/)? newItemName : `${newItemName}.jsx`
-    const path = '/' + name
-    const newFile = { id: Date.now(), name, path, content: '' }
-    setFiles([...files, newFile])
-    setActiveId(newFile.id)
-    await saveFile(newFile.id)
-    setNewItemName('')
-    setShowNewFileModal(false)
+    if (!newItemName.trim() || !workspaceRoot) return
+    const name = newItemName.match(/\.(jsx?|html|css|json|md|txt)$/) ? newItemName : `${newItemName}.jsx`
+    const path = `${workspaceRoot}/${name}`
+    try {
+      await Filesystem.writeFile({
+        path: path,
+        data: '',
+        directory: Directory.ExternalStorage,
+        encoding: Encoding.UTF8,
+        recursive: true
+      })
+      const newFile = {
+        id: Date.now() + Math.random(),
+        name,
+        path,
+        content: ''
+      }
+      setFiles([...files, newFile])
+      setActiveId(newFile.id)
+      setNewItemName('')
+      setShowNewFileModal(false)
+      setStatus('file created')
+    } catch (e) {
+      setStatus('create failed')
+    }
   }
 
   const createFolder = async () => {
-    if (!newItemName.trim()) return
+    if (!newItemName.trim() || !workspaceRoot) return
+    const path = `${workspaceRoot}/${newItemName}`
     try {
-      await Filesystem.mkdir({ path: ROOT + '/' + newItemName, directory: Directory.Documents, recursive: true })
+      await Filesystem.mkdir({
+        path: path,
+        directory: Directory.ExternalStorage,
+        recursive: true
+      })
       setStatus('folder created')
       setNewItemName('')
       setShowNewFolderModal(false)
+      await loadWorkspace(workspaceRoot)
     } catch (e) {
       setStatus('folder failed')
     }
   }
 
-  const importFiles = async () => {
-    try {
-      setStatus('picking files...')
-      const result = await FilePicker.pickFiles({
-        types: ['text/*'],
-        multiple: true,
-        readData: true
-      })
-
-      if (!result.files.length) return setStatus('no files picked')
-
-      const newFiles = []
-      for (const file of result.files) {
-        const content = atob(file.data)
-        const path = '/' + file.name
-        const newFile = {
-          id: Date.now() + Math.random(),
-          name: file.name,
-          path: path,
-          content: content
-        }
-        newFiles.push(newFile)
-
-        await Filesystem.writeFile({
-          path: ROOT + path,
-          data: content,
-          directory: Directory.Documents,
-          encoding: Encoding.UTF8,
-          recursive: true
-        })
-      }
-
-      setFiles([...files,...newFiles])
-      if (newFiles[0]) setActiveId(newFiles[0].id)
-      setStatus(`imported ${newFiles.length} files`)
-    } catch (e) {
-      if (e.message!== 'pickFiles canceled.') {
-        setStatus('import failed')
-        console.error(e)
-      }
-    }
-  }
-
   const deleteFile = async (fileId) => {
     const file = files.find(f => f.id === fileId)
-    if (!file) return
+    if (!file || !workspaceRoot) return
     try {
-      await Filesystem.deleteFile({ path: ROOT + file.path, directory: Directory.Documents })
-      const newFiles = files.filter(f => f.id!== fileId)
+      await Filesystem.deleteFile({
+        path: file.path,
+        directory: Directory.ExternalStorage
+      })
+      const newFiles = files.filter(f => f.id !== fileId)
       setFiles(newFiles)
       if (activeId === fileId && newFiles.length > 0) setActiveId(newFiles[0].id)
+      setStatus('deleted')
     } catch (e) {
       setStatus('delete failed')
     }
@@ -307,21 +327,83 @@ useEffect(() => {
   }
 
   const confirmRename = async () => {
-    if (!renameFile ||!renameValue.trim()) return
+    if (!renameFile || !renameValue.trim() || !workspaceRoot) return
     const oldPath = renameFile.path
     const newPath = oldPath.substring(0, oldPath.lastIndexOf('/') + 1) + renameValue
     try {
-      await Filesystem.rename({ from: ROOT + oldPath, to: ROOT + newPath, directory: Directory.Documents })
-      setFiles(files.map(f => f.id === renameFile.id? {...f, name: renameValue, path: newPath } : f))
+      await Filesystem.rename({
+        from: oldPath,
+        to: newPath,
+        directory: Directory.ExternalStorage
+      })
+      setFiles(files.map(f =>
+        f.id === renameFile.id ? { ...f, name: renameValue, path: newPath } : f
+      ))
       setRenameFile(null)
       setRenameValue('')
+      setStatus('renamed')
     } catch (e) {
       setStatus('rename failed')
     }
   }
 
+  const importFiles = async () => {
+    if (!workspaceRoot) {
+      setStatus('open a folder first')
+      return
+    }
+    setStatus('picking files...')
+    try {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.multiple = true
+      input.accept = '*/*'
+
+      const fileList = await new Promise((resolve, reject) => {
+        input.onchange = (e) => resolve(e.target.files)
+        input.oncancel = () => reject(new Error('canceled'))
+        input.click()
+      })
+
+      if (!fileList || fileList.length === 0) {
+        setStatus('no files picked')
+        return
+      }
+
+      const newFiles = []
+      for (const file of fileList) {
+        const content = await file.text()
+        const fileName = file.name
+        const path = `${workspaceRoot}/${fileName}`
+        await Filesystem.writeFile({
+          path: path,
+          data: content,
+          directory: Directory.ExternalStorage,
+          encoding: Encoding.UTF8,
+          recursive: true
+        })
+        const newFile = {
+          id: Date.now() + Math.random(),
+          name: fileName,
+          path,
+          content
+        }
+        newFiles.push(newFile)
+      }
+
+      setFiles([...files, ...newFiles])
+      if (newFiles[0]) setActiveId(newFiles[0].id)
+      setStatus(`imported ${newFiles.length} files`)
+    } catch (e) {
+      if (e.message !== 'canceled') {
+        setStatus('import failed')
+      }
+    }
+  }
+
+  // ---------- Editor Functions ----------
   const handleChange = (value) => {
-    setFiles(files.map(f => f.id === activeId? {...f, content: value } : f))
+    setFiles(files.map(f => f.id === activeId ? { ...f, content: value } : f))
     setDirtyFiles(prev => new Set(prev).add(activeId))
   }
 
@@ -406,7 +488,7 @@ useEffect(() => {
         setProblems(markers.map(m => ({
           line: m.startLineNumber,
           message: m.message,
-          severity: m.severity === 8? 'error' : 'warning',
+          severity: m.severity === 8 ? 'error' : 'warning',
           file: activeFile?.path
         })))
       }
@@ -430,88 +512,90 @@ useEffect(() => {
     setTimeout(() => setStatus('ready'), 1000)
   }
 
+  // ---------- AI Functions ----------
   const searchTemplateAI = async () => {
-  if (!templateInput.trim()) return
-  setStatus('HYE AI generating...')
-  setTemplateResult(null)
-  try {
-    const res = await fetch('https://hye-api.onrender.com/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: `Generate React code template for: ${templateInput}. Return only code.`,
-        type: 'template'
+    if (!templateInput.trim()) return
+    setStatus('HYE AI generating...')
+    setTemplateResult(null)
+    try {
+      const res = await fetch('https://hye-api.onrender.com/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: `Generate React code template for: ${templateInput}. Return only code.`,
+          type: 'template'
+        })
       })
-    })
-    const data = await res.json()
-    setTemplateResult({
-      name: `AI: ${templateInput}`,
-      code: data.code || '// AI returned no code',
-      desc: data.explanation || `AI generated`,
-      source: 'ai'
-    })
-    setStatus('ready')
-  } catch (e) {
-    setTemplateResult({ name: 'Error', code: `// AI failed: ${e.message}`, desc: 'Check backend' })
-    setStatus('error')
-  }
-}
-
-const searchHelpAI = async () => {
-  if (!helpInput.trim()) return
-  setStatus('HYE AI generating...')
-  setHelpResult(null)
-  try {
-    const res = await fetch('https://hye-api.onrender.com/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: `Give syntax example for: ${helpInput}. Return code + comment.`,
-        type: 'help'
+      const data = await res.json()
+      setTemplateResult({
+        name: `AI: ${templateInput}`,
+        code: data.code || '// AI returned no code',
+        desc: data.explanation || `AI generated`,
+        source: 'ai'
       })
-    })
-    const data = await res.json()
-    setHelpResult({
-      name: `AI: ${helpInput}`,
-      code: data.code || '// AI returned no code',
-      desc: data.explanation || `AI syntax help`,
-      source: 'ai'
-    })
-    setStatus('ready')
-  } catch (e) {
-    setHelpResult({ name: 'Error', code: `// AI failed: ${e.message}`, desc: 'Check backend' })
-    setStatus('error')
+      setStatus('ready')
+    } catch (e) {
+      setTemplateResult({ name: 'Error', code: `// AI failed: ${e.message}`, desc: 'Check backend' })
+      setStatus('error')
+    }
   }
-}
 
-const searchAskAI = async () => {
-  if (!askInput.trim()) return
-  setStatus('HYE AI thinking...')
-  setAskResult(null)
-  try {
-    const res = await fetch('https://hye-api.onrender.com/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        prompt: `Explain ${askInput} in React. Short + 1 code example.`,
-        type: 'ask'
+  const searchHelpAI = async () => {
+    if (!helpInput.trim()) return
+    setStatus('HYE AI generating...')
+    setHelpResult(null)
+    try {
+      const res = await fetch('https://hye-api.onrender.com/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: `Give syntax example for: ${helpInput}. Return code + comment.`,
+          type: 'help'
+        })
       })
-    })
-    const data = await res.json()
-    setAskResult({
-      name: `AI: ${askInput}`,
-      code: data.code || `// ${data.result}`,
-      desc: data.explanation || data.result || 'AI explanation',
-      source: 'ai'
-    })
-    setStatus('ready')
-  } catch (e) {
-    setAskResult({ name: 'Error', code: `// AI failed: ${e.message}`, desc: 'Check backend' })
-    setStatus('error')
+      const data = await res.json()
+      setHelpResult({
+        name: `AI: ${helpInput}`,
+        code: data.code || '// AI returned no code',
+        desc: data.explanation || `AI syntax help`,
+        source: 'ai'
+      })
+      setStatus('ready')
+    } catch (e) {
+      setHelpResult({ name: 'Error', code: `// AI failed: ${e.message}`, desc: 'Check backend' })
+      setStatus('error')
+    }
   }
-              }
 
-  const runPreview = () => {
+  const searchAskAI = async () => {
+    if (!askInput.trim()) return
+    setStatus('HYE AI thinking...')
+    setAskResult(null)
+    try {
+      const res = await fetch('https://hye-api.onrender.com/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: `Explain ${askInput} in React. Short + 1 code example.`,
+          type: 'ask'
+        })
+      })
+      const data = await res.json()
+      setAskResult({
+        name: `AI: ${askInput}`,
+        code: data.code || `// ${data.result}`,
+        desc: data.explanation || data.result || 'AI explanation',
+        source: 'ai'
+      })
+      setStatus('ready')
+    } catch (e) {
+      setAskResult({ name: 'Error', code: `// AI failed: ${e.message}`, desc: 'Check backend' })
+      setStatus('error')
+    }
+  }
+
+  // ---------- Preview ----------
+   const runPreview = () => {
     const htmlFile = files.find(f => f.name === 'index.html')
     if (!htmlFile) return setStatus('no index.html')
     const appFile = files.find(f => f.name === 'App.jsx')
@@ -567,6 +651,12 @@ const searchAskAI = async () => {
     })
   }
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    window.location.reload()
+  }
+
+  // ---------- File Tree ----------
   const buildTree = () => {
     const tree = {}
     files.forEach(f => {
@@ -574,7 +664,7 @@ const searchAskAI = async () => {
       let current = tree
       parts.forEach((part, i) => {
         if (i === parts.length - 1) {
-          current[part] = {...f, isFile: true }
+          current[part] = { ...f, isFile: true }
         } else {
           current[part] = current[part] || { isFolder: true, children: {} }
           current = current[part].children
@@ -587,7 +677,7 @@ const searchAskAI = async () => {
   const toggleFolder = (path) => {
     setExpandedFolders(prev => {
       const n = new Set(prev)
-      n.has(path)? n.delete(path) : n.add(path)
+      n.has(path) ? n.delete(path) : n.add(path)
       return n
     })
   }
@@ -597,7 +687,7 @@ const searchAskAI = async () => {
       const fullPath = path + '/' + name
       if (item.isFile) {
         return (
-          <div key={item.id} className={`tree-item ${activeId === item.id? 'active' : ''}`} onClick={() => setActiveId(item.id)}>
+          <div key={item.id} className={`tree-item ${activeId === item.id ? 'active' : ''}`} onClick={() => setActiveId(item.id)}>
             {name} {dirtyFiles.has(item.id) && '•'}
           </div>
         )
@@ -606,7 +696,7 @@ const searchAskAI = async () => {
       return (
         <div key={fullPath}>
           <div className="tree-folder" onClick={() => toggleFolder(fullPath)}>
-            {expanded? <ChevronDown size={14} /> : <ChevronRight size={14} />} {name}
+            {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />} {name}
           </div>
           {expanded && <div className="tree-children">{renderTree(item.children, fullPath)}</div>}
         </div>
@@ -616,70 +706,118 @@ const searchAskAI = async () => {
 
   const activeFile = files.find(f => f.id === activeId)
 
+  // ---------- Render ----------
   return (
     <div className="hye-editor">
       <style>{`
-    .hye-editor { height: 100vh; display: flex; flex-direction: column; background: #1e1e1e; color: #d4d4d4; font-family: 'JetBrains Mono', monospace; font-size: 13px; }
-    .top-bar { height: 35px; background: #252526; border-bottom: 1px solid #3c3c3c; display: flex; align-items: center; padding: 0 8px; gap: 8px; }
-    .top-bar button { background: #3c3c3c; border: none; color: #ccc; padding: 4px 8px; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 4px; }
-    .top-bar button:hover { background: #4c4c4c; }
-    .menu-dropdown { position: absolute; top: 35px; left: 8px; background: #252526; border: 1px solid #3c3c3c; border-radius: 4px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
-    .menu-item { padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; }
-    .menu-item:hover { background: #094771; }
-    .menu-divider { height: 1px; background: #3c3c3c; margin: 4px 0; }
-    .main { flex: 1; display: flex; overflow: hidden; }
-    .sidebar { width: 220px; background: #252526; border-right: 1px solid #3c3c3c; display: flex; flex-direction: column; }
-    .sidebar.collapsed { width: 0; overflow: hidden; }
-    .sidebar-header { padding: 8px; border-bottom: 1px solid #3c3c3c; display: flex; justify-content: space-between; align-items: center; }
-    .sidebar-actions button { background: none; border: none; color: #ccc; cursor: pointer; padding: 2px; }
-    .tree { flex: 1; overflow-y: auto; padding: 4px; }
-    .tree-item,.tree-folder { padding: 4px 8px; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 4px; }
-    .tree-item:hover,.tree-folder:hover { background: #2a2d2e; }
-    .tree-item.active { background: #094771; }
-    .tree-children { margin-left: 16px; }
-    .editor-area { flex: 1; display: flex; flex-direction: column; }
-    .tabs { height: 35px; background: #252526; border-bottom: 1px solid #3c3c3c; display: flex; overflow-x: auto; }
-    .tab { padding: 0 12px; display: flex; align-items: center; gap: 6px; cursor: pointer; border-right: 1px solid #3c3c3c; white-space: nowrap; }
-    .tab:hover { background: #2a2d2e; }
-    .tab.active { background: #1e1e1e; }
-    .panel { height: 200px; background: #1e1e1e; border-top: 1px solid #3c3c3c; overflow-y: auto; }
-    .panel-header { padding: 4px 8px; background: #252526; border-bottom: 1px solid #3c3c3c; font-size: 11px; display: flex; justify-content: space-between; align-items: center; }
-    .console-log { padding: 2px 8px; font-family: monospace; font-size: 12px; border-bottom: 1px solid #2a2d2e; }
-    .console-error { color: #ff6b6b; }
-    .console-warn { color: #ffd700; }
-    .problem-item { padding: 4px 8px; cursor: pointer; font-size: 12px; border-bottom: 1px solid #2a2d2e; }
-    .problem-item:hover { background: #2a2d2e; }
-    .status-bar { height: 22px; background: #58a6ff; color: #000; display: flex; align-items: center; padding: 0 8px; font-size: 12px; }
-    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 2000; }
-    .modal { background: #252526; border: 1px solid #3c3c3c; border-radius: 6px; width: 90%; max-width: 600px; max-height: 80vh; display: flex; flex-direction: column; }
-    .modal-header { padding: 12px; border-bottom: 1px solid #3c3c3c; display: flex; justify-content: space-between; align-items: center; }
-    .modal-header h3 { margin: 0; font-size: 14px; }
-    .modal-close { background: none; border: none; color: #ccc; cursor: pointer; padding: 4px; }
-    .modal-search { padding: 12px; border-bottom: 1px solid #3c3c3c; display: flex; gap: 8px; }
-    .modal-search input { flex: 1; background: #1e1e1e; border: 1px solid #3c3c3c; color: #d4d4d4; padding: 6px 8px; border-radius: 3px; }
-    .modal-search button { background: #58a6ff; border: none; color: #000; padding: 6px 12px; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 4px; }
-    .modal-result { padding: 12px; overflow-y: auto; }
-    .modal-result-header { margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
-    .modal-result-desc { color: #7d8590; font-size: 12px; margin-bottom: 12px; }
-    .modal-result pre { background: #1e1e1e; padding: 12px; border-radius: 3px; overflow-x: auto; font-size: 12px; margin: 0 0 12px 0; }
-    .modal-actions { display: flex; gap: 8px; }
-    .modal-actions button { flex: 1; background: #3c3c3c; border: none; color: #ccc; padding: 8px; cursor: pointer; border-radius: 3px; display: flex; align-items: center; justify-content: center; gap: 4px; }
-    .modal-actions button.primary { background: #58a6ff; color: #000; }
-    .modal input { background: #1e1e1e; border: 1px solid #3c3c3c; color: #d4d4d4; padding: 6px 8px; border-radius: 3px; width: 100%; box-sizing: border-box; }
+        .hye-editor { height: 100vh; display: flex; flex-direction: column; background: #1e1e1e; color: #d4d4d4; font-family: 'JetBrains Mono', monospace; font-size: 13px; }
+        .top-bar { height: 40px; background: #252526; border-bottom: 1px solid #3c3c3c; display: flex; align-items: center; padding: 0 8px; gap: 6px; }
+        .top-bar button { background: #3c3c3c; border: none; color: #ccc; padding: 4px 10px; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 4px; font-size: 12px; }
+        .top-bar button:hover { background: #4c4c4c; }
+        .top-bar .spacer { flex: 1; }
+        .top-bar .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+        .top-bar .status-dot.active { background: #4ec9b0; }
+        .top-bar .status-dot.busy { background: #ffd700; }
+        .top-bar .status-dot.error { background: #f85149; }
+        .user-avatar { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 4px 8px; border-radius: 3px; background: transparent; border: none; color: #ccc; font-size: 12px; }
+        .user-avatar:hover { background: #2a2d2e; }
+        .user-dropdown { position: absolute; top: 42px; right: 8px; background: #252526; border: 1px solid #3c3c3c; border-radius: 4px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+        .user-dropdown .menu-item { padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        .user-dropdown .menu-item:hover { background: #094771; }
+        .menu-dropdown { position: absolute; top: 40px; left: 8px; background: #252526; border: 1px solid #3c3c3c; border-radius: 4px; min-width: 200px; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+        .menu-item { padding: 8px 12px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        .menu-item:hover { background: #094771; }
+        .menu-divider { height: 1px; background: #3c3c3c; margin: 4px 0; }
+        .main { flex: 1; display: flex; overflow: hidden; }
+        .sidebar { width: 240px; background: #252526; border-right: 1px solid #3c3c3c; display: flex; flex-direction: column; }
+        .sidebar.collapsed { width: 0; overflow: hidden; border: none; }
+        .sidebar-header { padding: 6px 8px; border-bottom: 1px solid #3c3c3c; display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: #7d8590; font-weight: bold; }
+        .sidebar-actions { display: flex; gap: 4px; }
+        .sidebar-actions button { background: none; border: none; color: #ccc; cursor: pointer; padding: 2px; }
+        .sidebar-actions button:hover { color: #fff; }
+        .tree { flex: 1; overflow-y: auto; padding: 4px; }
+        .tree-item, .tree-folder { padding: 4px 8px; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 4px; font-size: 13px; }
+        .tree-item:hover, .tree-folder:hover { background: #2a2d2e; }
+        .tree-item.active { background: #094771; }
+        .tree-children { margin-left: 16px; }
+        .editor-area { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        .tabs { height: 35px; background: #252526; border-bottom: 1px solid #3c3c3c; display: flex; overflow-x: auto; }
+        .tab { padding: 0 12px; display: flex; align-items: center; gap: 6px; cursor: pointer; border-right: 1px solid #3c3c3c; white-space: nowrap; font-size: 12px; }
+        .tab:hover { background: #2a2d2e; }
+        .tab.active { background: #1e1e1e; }
+        .editor-container { flex: 1; position: relative; }
+        .editor-container iframe { width: 100%; height: 100%; border: none; background: #1e1e1e; }
+        .panel { height: 200px; background: #1e1e1e; border-top: 1px solid #3c3c3c; overflow-y: auto; }
+        .panel-header { padding: 4px 8px; background: #252526; border-bottom: 1px solid #3c3c3c; font-size: 11px; display: flex; justify-content: space-between; align-items: center; }
+        .console-log { padding: 2px 8px; font-family: monospace; font-size: 12px; border-bottom: 1px solid #2a2d2e; }
+        .console-error { color: #ff6b6b; }
+        .console-warn { color: #ffd700; }
+        .problem-item { padding: 4px 8px; cursor: pointer; font-size: 12px; border-bottom: 1px solid #2a2d2e; }
+        .problem-item:hover { background: #2a2d2e; }
+        .status-bar { height: 22px; background: #58a6ff; color: #000; display: flex; align-items: center; padding: 0 8px; font-size: 11px; gap: 12px; }
+        .status-bar .status-text { display: flex; align-items: center; gap: 4px; }
+        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 2000; }
+        .modal { background: #252526; border: 1px solid #3c3c3c; border-radius: 6px; width: 90%; max-width: 600px; max-height: 80vh; display: flex; flex-direction: column; }
+        .modal-header { padding: 12px; border-bottom: 1px solid #3c3c3c; display: flex; justify-content: space-between; align-items: center; }
+        .modal-header h3 { margin: 0; font-size: 14px; }
+        .modal-close { background: none; border: none; color: #ccc; cursor: pointer; padding: 4px; }
+        .modal-search { padding: 12px; border-bottom: 1px solid #3c3c3c; display: flex; gap: 8px; }
+        .modal-search input { flex: 1; background: #1e1e1e; border: 1px solid #3c3c3c; color: #d4d4d4; padding: 6px 8px; border-radius: 3px; }
+        .modal-search button { background: #58a6ff; border: none; color: #000; padding: 6px 12px; cursor: pointer; border-radius: 3px; display: flex; align-items: center; gap: 4px; }
+        .modal-result { padding: 12px; overflow-y: auto; }
+        .modal-result-header { margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .modal-result-desc { color: #7d8590; font-size: 12px; margin-bottom: 12px; }
+        .modal-result pre { background: #1e1e1e; padding: 12px; border-radius: 3px; overflow-x: auto; font-size: 12px; margin: 0 0 12px 0; }
+        .modal-actions { display: flex; gap: 8px; }
+        .modal-actions button { flex: 1; background: #3c3c3c; border: none; color: #ccc; padding: 8px; cursor: pointer; border-radius: 3px; display: flex; align-items: center; justify-content: center; gap: 4px; }
+        .modal-actions button.primary { background: #58a6ff; color: #000; }
+        .modal input { background: #1e1e1e; border: 1px solid #3c3c3c; color: #d4d4d4; padding: 6px 8px; border-radius: 3px; width: 100%; box-sizing: border-box; }
+        @media (max-width: 600px) {
+          .sidebar { width: 180px; }
+          .top-bar button { padding: 2px 6px; font-size: 11px; }
+          .top-bar .user-avatar { font-size: 11px; padding: 2px 4px; }
+        }
       `}</style>
 
+      {/* ----- Top Bar ----- */}
       <div className="top-bar">
         <button onClick={() => setMenuOpen(!menuOpen)}><Menu size={16} /> HYE</button>
         <button onClick={runPreview}>▶ Run</button>
         <button onClick={() => setSidebarOpen(!sidebarOpen)}>Explorer</button>
-        <div style={{marginLeft: 'auto', fontSize: 11, display: 'flex', alignItems: 'center', gap: 12}}>
-          <span>{session?.user?.email}</span>
-          <span>{status}</span>
+        <span style={{fontSize: 11, color: '#7d8590', marginLeft: 4}}>
+          {workspaceRoot ? `📁 ${workspaceRoot}` : 'No workspace'}
+        </span>
+
+        <div className="spacer" />
+
+        <div style={{position: 'relative', display: 'flex', alignItems: 'center', gap: 8}}>
+          <span className={`status-dot ${status === 'ready' ? 'active' : status === 'error' ? 'error' : 'busy'}`} />
+          <button className="user-avatar" onClick={() => setUserMenuOpen(!userMenuOpen)}>
+            <User size={14} />
+            <span style={{maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'}}>
+              {session?.user?.email?.split('@')[0] || 'User'}
+            </span>
+          </button>
+          {userMenuOpen && (
+            <div className="user-dropdown" onMouseLeave={() => setUserMenuOpen(false)}>
+              <div className="menu-item" style={{cursor: 'default', opacity: 0.8}}>
+                <User size={14} /> {session?.user?.email}
+              </div>
+              <div className="menu-divider" />
+              <div className="menu-item" onClick={handleLogout}>
+                <LogOut size={14} /> Logout
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
+      {/* ----- Menu Dropdown ----- */}
       {menuOpen && (
         <div className="menu-dropdown" onMouseLeave={() => setMenuOpen(false)}>
+          <div className="menu-item" onClick={openFolder}><FolderOpen size={16} /> Open Folder</div>
+          <div className="menu-item" onClick={closeProject}><X size={16} /> Close Project</div>
+          <div className="menu-divider" />
           <div className="menu-item" onClick={() => saveFile(activeId)}><FileCode size={16} /> Save</div>
           <div className="menu-item" onClick={localFix}><Wand2 size={16} /> Local Fix</div>
           <div className="menu-item" onClick={offlineFix}><Wand2 size={16} /> Offline Fix</div>
@@ -695,78 +833,82 @@ const searchAskAI = async () => {
           <div className="menu-divider" />
           <a className="menu-item" href="https://your-terminal-url.com" target="_blank" style={{textDecoration: 'none', color: '#d4d4d4'}}><Terminal size={16} /> HYE Terminal</a>
           <div className="menu-divider" />
-          <div className="menu-item" onClick={() => { setShowConsole(!showConsole); setMenuOpen(false) }}>Console: {showConsole? 'On' : 'Off'}</div>
-          <div className="menu-item" onClick={() => { setAutoSave(!autoSave); setMenuOpen(false) }}>Auto-save: {autoSave? 'On' : 'Off'}</div>
-          <div className="menu-divider" />
-          <div className="menu-item" onClick={handleLogout}><LogOut size={16} /> Logout</div>
+          <div className="menu-item" onClick={() => { setShowConsole(!showConsole); setMenuOpen(false) }}>Console: {showConsole ? 'On' : 'Off'}</div>
+          <div className="menu-item" onClick={() => { setAutoSave(!autoSave); setMenuOpen(false) }}>Auto-save: {autoSave ? 'On' : 'Off'}</div>
         </div>
       )}
 
+      {/* ----- Main Layout ----- */}
       <div className="main">
-        <div className={`sidebar ${!sidebarOpen? 'collapsed' : ''}`}>
+        <div className={`sidebar ${!sidebarOpen ? 'collapsed' : ''}`}>
           <div className="sidebar-header">
-            <span style={{fontSize: 11, fontWeight: 'bold', color: '#7d8590'}}>EXPLORER</span>
+            EXPLORER
             <div className="sidebar-actions">
               <button onClick={() => setShowNewFileModal(true)} title="New File"><Plus size={14} /></button>
               <button onClick={() => setShowNewFolderModal(true)} title="New Folder"><FolderPlus size={14} /></button>
               <button onClick={importFiles} title="Import Files"><Upload size={14} /></button>
+              <button onClick={closeProject} title="Close Project"><X size={14} /></button>
             </div>
           </div>
-          <div className="tree">{renderTree(buildTree())}</div>
+          <div className="tree">
+            {workspaceRoot ? (
+              renderTree(buildTree())
+            ) : (
+              <div style={{padding: 12, color: '#7d8590', fontSize: 12}}>Open a folder to start editing</div>
+            )}
+          </div>
         </div>
 
         <div className="editor-area">
           <div className="tabs">
             {files.map(f => (
-              <div key={f.id} className={`tab ${activeId === f.id? 'active' : ''}`} onClick={() => setActiveId(f.id)}>
-
+              <div key={f.id} className={`tab ${activeId === f.id ? 'active' : ''}`} onClick={() => setActiveId(f.id)}>
                 {f.name}
                 {dirtyFiles.has(f.id) && '•'}
                 {files.length > 1 && <X size={12} onClick={(e) => { e.stopPropagation(); deleteFile(f.id) }} />}
-
-                
               </div>
             ))}
           </div>
 
-          {showPreview? (
-            <iframe ref={iframeRef} style={{flex: 1, border: 'none', background: '#1e1e1e'}} sandbox="allow-scripts allow-same-origin" />
-          ) : (
-            <Editor
-              height="600px"
-              language="javascript"
-              value={activeFile?.content || ''}
-              onChange={handleChange}
-              onMount={handleEditorMount}
-              theme="hye-dark"
-              options={{
-                fontFamily: 'JetBrains Mono,monospace',
-                fontSize: 14,
-                minimap: { enabled: true },
-                wordWrap: 'off',
-                tabSize: 2,
-                folding: true,
-                foldingStrategy: 'indentation',
-                showFoldingControls: 'always',
-                bracketPairColorization: { enabled: true, independentColorPoolPerBracketType: true },
-                guides: { bracketPairs: true, bracketPairsHorizontal: 'active' },
-                renderValidationDecorations: 'on',
-                autoClosingBrackets: 'always',
-                autoClosingQuotes: 'always',
-                autoIndent: 'full',
-                formatOnPaste: true,
-                formatOnType: true,
-                inlineSuggest: { enabled: true },
-                quickSuggestions: { other: true, comments: false, strings: true },
-                tabCompletion: 'on',
-                suggestOnTriggerCharacters: true,
-                acceptSuggestionOnEnter: 'on',
-                scrollBeyondLastLine: true,
-                multiCursorModifier: 'alt',
-                automaticLayout: true
-              }}
-            />
-          )}
+          <div className="editor-container">
+            {showPreview ? (
+              <iframe ref={iframeRef} sandbox="allow-scripts allow-same-origin" />
+            ) : (
+              <Editor
+                language="javascript"
+                value={activeFile?.content || ''}
+                onChange={handleChange}
+                onMount={handleEditorMount}
+                theme="hye-dark"
+                options={{
+                  fontFamily: 'JetBrains Mono,monospace',
+                  fontSize: 14,
+                  minimap: { enabled: true },
+                  wordWrap: 'off',
+                  tabSize: 2,
+                  folding: true,
+                  foldingStrategy: 'indentation',
+                  showFoldingControls: 'always',
+                  bracketPairColorization: { enabled: true, independentColorPoolPerBracketType: true },
+                  guides: { bracketPairs: true, bracketPairsHorizontal: 'active' },
+                  renderValidationDecorations: 'on',
+                  autoClosingBrackets: 'always',
+                  autoClosingQuotes: 'always',
+                  autoIndent: 'full',
+                  formatOnPaste: true,
+                  formatOnType: true,
+                  inlineSuggest: { enabled: true },
+                  quickSuggestions: { other: true, comments: false, strings: true },
+                  tabCompletion: 'on',
+                  suggestOnTriggerCharacters: true,
+                  acceptSuggestionOnEnter: 'on',
+                  scrollBeyondLastLine: true,
+                  multiCursorModifier: 'alt',
+                  automaticLayout: true
+                }}
+              />
+            )}
+          </div>
 
           {showConsole && (
             <div className="panel">
@@ -774,7 +916,7 @@ const searchAskAI = async () => {
                 CONSOLE
                 <button onClick={() => setShowConsole(false)} style={{background: 'none', border: 'none', color: '#ccc', cursor: 'pointer'}}><X size={14} /></button>
               </div>
-              {consoleLogs.length === 0? (
+              {consoleLogs.length === 0 ? (
                 <div style={{padding: 12, color: '#7d8590', fontSize: 12}}>Console output appears here...</div>
               ) : consoleLogs.map((log, i) => (
                 <div key={i} className={`console-log console-${log.method}`}>
@@ -784,7 +926,7 @@ const searchAskAI = async () => {
             </div>
           )}
 
-          {problems.length > 0 &&!showConsole && (
+          {problems.length > 0 && !showConsole && (
             <div className="panel">
               <div className="panel-header">PROBLEMS ({problems.length})</div>
               {problems.map((p, i) => (
@@ -798,7 +940,7 @@ const searchAskAI = async () => {
                     }, 100)
                   }
                 }}>
-                  <AlertCircle size={12} style={{display: 'inline', marginRight: 6, color: p.severity === 'error'? '#ff6b6b' : '#ffd700'}} />
+                  <AlertCircle size={12} style={{display: 'inline', marginRight: 6, color: p.severity === 'error' ? '#ff6b6b' : '#ffd700'}} />
                   {p.file}:{p.line} - {p.message}
                 </div>
               ))}
@@ -807,10 +949,18 @@ const searchAskAI = async () => {
         </div>
       </div>
 
+      {/* ----- Status Bar (Compact) ----- */}
       <div className="status-bar">
-        {isNative? 'device' : 'cloud'} | {status} {dirtyFiles.size > 0 && '| unsaved'} | Ln {editorRef.current?.getPosition()?.lineNumber || 1}, Col {editorRef.current?.getPosition()?.column || 1}
+        <span className="status-text">
+          <span className={`status-dot ${status === 'ready' ? 'active' : status === 'error' ? 'error' : 'busy'}`} />
+          {status}
+        </span>
+        {dirtyFiles.size > 0 && <span>| unsaved</span>}
+        <span>| Ln {editorRef.current?.getPosition()?.lineNumber || 1}</span>
+        <span>Col {editorRef.current?.getPosition()?.column || 1}</span>
+        <span style={{marginLeft: 'auto'}}>{workspaceRoot || 'no project'}</span>
       </div>
-
+         {/* ----- Modals (unchanged) ----- */}
       {renameFile && (
         <div className="modal-overlay" onClick={() => setRenameFile(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
@@ -836,7 +986,7 @@ const searchAskAI = async () => {
       {showNewFileModal && (
         <div className="modal-overlay" onClick={() => setShowNewFileModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3 style={{marginTop: 0}}>New File</h3>
+            <h3>New File</h3>
             <input
               value={newItemName}
               onChange={e => setNewItemName(e.target.value)}
@@ -859,7 +1009,7 @@ const searchAskAI = async () => {
       {showNewFolderModal && (
         <div className="modal-overlay" onClick={() => setShowNewFolderModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3 style={{marginTop: 0}}>New Folder</h3>
+            <h3>New Folder</h3>
             <input
               value={newItemName}
               onChange={e => setNewItemName(e.target.value)}
@@ -886,7 +1036,6 @@ const searchAskAI = async () => {
               <h3>Templates</h3>
               <button className="modal-close" onClick={() => { setShowTemplateModal(false); setTemplateResult(null); setTemplateInput(''); setTemplateSearch('') }}><X size={16} /></button>
             </div>
-
             <div className="modal-search">
               <input
                 placeholder="Ask AI: e.g. dashboard with charts..."
@@ -896,12 +1045,11 @@ const searchAskAI = async () => {
               />
               <button onClick={searchTemplateAI}><Search size={16} /> AI</button>
             </div>
-
             {templateResult && (
               <div className="modal-result">
                 <div className="modal-result-header">
                   <strong>{templateResult.name}</strong>
-                  <span style={{fontSize: 11, color: '#58a6ff'}}>{templateResult.source === 'ai'? 'AI' : 'Local'}</span>
+                  <span style={{fontSize: 11, color: '#58a6ff'}}>{templateResult.source === 'ai' ? 'AI' : 'Local'}</span>
                 </div>
                 <div className="modal-result-desc">{templateResult.desc}</div>
                 <pre>{templateResult.code}</pre>
@@ -915,10 +1063,9 @@ const searchAskAI = async () => {
                 </div>
               </div>
             )}
-
             <div className="menu-divider" style={{margin: '12px 0'}} />
-            <input 
-              placeholder="Filter local templates..." 
+            <input
+              placeholder="Filter local templates..."
               value={templateSearch}
               onChange={e => setTemplateSearch(e.target.value)}
               style={{width: '100%', marginBottom: 8}}
@@ -943,7 +1090,6 @@ const searchAskAI = async () => {
               <h3>HYE-HELP</h3>
               <button className="modal-close" onClick={() => { setShowHelpModal(false); setHelpResult(null); setHelpInput(''); setHelpSearch('') }}><X size={16} /></button>
             </div>
-            
             <div className="modal-search">
               <input
                 placeholder="Ask AI: e.g. async await error handling..."
@@ -953,12 +1099,11 @@ const searchAskAI = async () => {
               />
               <button onClick={searchHelpAI}><Search size={16} /> AI</button>
             </div>
-
             {helpResult && (
               <div className="modal-result">
                 <div className="modal-result-header">
                   <strong>{helpResult.name}</strong>
-                  <span style={{fontSize: 11, color: '#58a6ff'}}>{helpResult.source === 'ai'? 'AI' : 'Local'}</span>
+                  <span style={{fontSize: 11, color: '#58a6ff'}}>{helpResult.source === 'ai' ? 'AI' : 'Local'}</span>
                 </div>
                 <div className="modal-result-desc">{helpResult.desc}</div>
                 <pre>{helpResult.code}</pre>
@@ -972,10 +1117,9 @@ const searchAskAI = async () => {
                 </div>
               </div>
             )}
-
             <div className="menu-divider" style={{margin: '12px 0'}} />
-            <input 
-              placeholder="Filter local help..." 
+            <input
+              placeholder="Filter local help..."
               value={helpSearch}
               onChange={e => setHelpSearch(e.target.value)}
               style={{width: '100%', marginBottom: 8}}
@@ -1000,7 +1144,6 @@ const searchAskAI = async () => {
               <h3>HYE-ASK</h3>
               <button className="modal-close" onClick={() => { setShowAskModal(false); setAskResult(null); setAskInput(''); setAskSearch('') }}><X size={16} /></button>
             </div>
-            
             <div className="modal-search">
               <input
                 placeholder="Ask AI: e.g. how does useCallback work..."
@@ -1010,12 +1153,11 @@ const searchAskAI = async () => {
               />
               <button onClick={searchAskAI}><Search size={16} /> AI</button>
             </div>
-
             {askResult && (
               <div className="modal-result">
                 <div className="modal-result-header">
                   <strong>{askResult.name}</strong>
-                  <span style={{fontSize: 11, color: '#58a6ff'}}>{askResult.source === 'ai'? 'AI' : 'Local'}</span>
+                  <span style={{fontSize: 11, color: '#58a6ff'}}>{askResult.source === 'ai' ? 'AI' : 'Local'}</span>
                 </div>
                 <div className="modal-result-desc">{askResult.desc}</div>
                 <pre>{askResult.code}</pre>
@@ -1029,10 +1171,9 @@ const searchAskAI = async () => {
                 </div>
               </div>
             )}
-
             <div className="menu-divider" style={{margin: '12px 0'}} />
-            <input 
-              placeholder="Filter local terms..." 
+            <input
+              placeholder="Filter local terms..."
               value={askSearch}
               onChange={e => setAskSearch(e.target.value)}
               style={{width: '100%', marginBottom: 8}}
@@ -1053,8 +1194,9 @@ const searchAskAI = async () => {
       )}
     </div>
   )
-}
+            }
 
+// ---------- Error Boundary ----------
 const ErrorBoundary = ({ children }) => {
   const [hasError, setHasError] = useState(false)
   const [error, setError] = useState(null)
@@ -1086,6 +1228,7 @@ const ErrorBoundary = ({ children }) => {
   return children
 }
 
+// ---------- App Entry ----------
 const HyeEditor = () => {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -1109,7 +1252,7 @@ const HyeEditor = () => {
 
   return (
     <ErrorBoundary>
-      {session? <HyeEditorCore session={session} /> : <LoginScreen />}
+      {session ? <HyeEditorCore session={session} /> : <LoginScreen />}
     </ErrorBoundary>
   )
 }
