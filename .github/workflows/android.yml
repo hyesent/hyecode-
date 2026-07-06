@@ -16,24 +16,39 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'       # Capacitor requires >=22
+          node-version: '22'
           cache: 'npm'
 
       - run: npm ci
 
-      - run: npm run build
+      # ---------- Build web app with env vars ----------
+      - name: Build web app
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      # ---------- Verify build output (debug) ----------
+      - name: Verify dist folder
+        run: |
+          ls -la dist/
+          test -f dist/index.html && echo "✅ dist/index.html found" || (echo "❌ dist/index.html MISSING" && exit 1)
 
       - uses: actions/setup-java@v4
         with:
-          java-version: '21'       # Capacitor 6+ needs Java 21
-          distribution: 'zulu'     # More reliable on GitHub runners
+          java-version: '21'
+          distribution: 'zulu'
           cache: 'gradle'
 
-      - name: Install Capacitor Filesystem
-        run: npm install @capacitor/filesystem
-
+      # No need to install @capacitor/filesystem – it's already in package.json
       - name: Capacitor Sync
         run: npx cap sync android
+
+      # ---------- Verify Capacitor copied files ----------
+      - name: Verify Capacitor copy
+        run: |
+          ls -la android/app/src/main/assets/public/
+          test -f android/app/src/main/assets/public/index.html && echo "✅ Copied successfully" || echo "❌ NOT copied!"
 
       - name: Grant Gradle execute permission
         run: chmod +x android/gradlew
