@@ -1257,3 +1257,4 @@ const HyeEditorCore = ({ session }) => {
 </div>
 );
 }
+export default HyeEditor;
