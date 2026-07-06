@@ -1244,4 +1244,72 @@ const HyeEditorCore = ({ session }) => {
 </div>
 );
 }
+// ---------- Error Boundary ----------
+const ErrorBoundary = ({ children }) => {
+  const [hasError, setHasError] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    const handler = (e) => {
+      setHasError(true)
+      setError(e.error || e.reason)
+    }
+    window.addEventListener('error', handler)
+    window.addEventListener('unhandledrejection', handler)
+    return () => {
+      window.removeEventListener('error', handler)
+      window.removeEventListener('unhandledrejection', handler)
+    }
+  }, [])
+
+  if (hasError) {
+    return (
+      <div style={{padding: 20, background: '#1e1e1e', color: '#ff6b6b', height: '100vh'}}>
+        <h2>HYE Editor Crashed</h2>
+        <pre style={{whiteSpace: 'pre-wrap'}}>{error?.toString()}</pre>
+        <button onClick={() => window.location.reload()} style={{padding: 8, background: '#58a6ff', border: 'none', color: '#000', cursor: 'pointer'}}>
+          Reload Editor
+        </button>
+      </div>
+    )
+  }
+  return children
+}
+
+// ---------- App Entry ----------
+const HyeEditor = () => {
+  const [session, setSession] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => {
+        setSession(session)
+        setLoading(false)
+      })
+      .catch((err) => {
+        console.error('Supabase session error:', err)
+        setSession(null)
+        setLoading(false)
+      })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  if (loading) {
+    return <div style={{height: '100vh', background: '#1e1e1e', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#58a6ff'}}>Loading HYE...</div>
+  }
+
+  return (
+    <ErrorBoundary>
+      {session ? <HyeEditorCore session={session} /> : <LoginScreen />}
+    </ErrorBoundary>
+  )
+}
+
+
 export default HyeEditor;
