@@ -11,11 +11,24 @@ import { terms } from './terms.js'
 
 const FILE_EXT = ['.js', '.jsx', '.ts', '.tsx', '.html', '.css', '.json', '.md', '.txt']
 
-// ---------- Supabase ----------
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-)
+// ---------- Supabase with fallback ----------
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+let supabase
+try {
+  supabase = createClient(supabaseUrl, supabaseKey)
+} catch {
+  supabase = {
+    auth: {
+      getSession: async () => ({ data: { session: null } }),
+      signInWithPassword: async () => ({ error: 'Supabase not configured' }),
+      signUp: async () => ({ error: 'Supabase not configured' }),
+      signOut: async () => {},
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+    }
+  }
+}
+
 // ---------- Login Screen ----------
 const LoginScreen = ({ onLogin }) => {
   const [email, setEmail] = useState('')
@@ -99,7 +112,8 @@ const HyeEditorCore = ({ session }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [showPreview, setShowPreview] = useState(false)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
-  const [workspacePath, setWorkspacePath] = useState('') // absolute path
+  const [workspacePath, setWorkspacePath] = useState('')
+  const [selectedFolder, setSelectedFolder] = useState('') // for creating files inside folders
 
   const [showProjectModal, setShowProjectModal] = useState(false)
   const [projectInput, setProjectInput] = useState('')
@@ -168,38 +182,47 @@ const HyeEditorCore = ({ session }) => {
 
     setStatus('loading workspace...')
     try {
-      // Ensure the folder exists – if not, create it
+      // Ensure the folder exists
       try {
         await Filesystem.mkdir({
           path: folderPath,
           directory: Directory.ExternalStorage,
-          recursive: true
+          recursive: true,
         })
       } catch {}
 
       const scan = async (path) => {
         const items = await Filesystem.readdir({
           path: path,
-          directory: Directory.ExternalStorage
+          directory: Directory.ExternalStorage,
         })
         const result = []
         for (const item of items.files) {
           const fullPath = path ? `${path}/${item.name}` : item.name
           if (item.type === 'directory') {
-            // Recursively scan subfolders
+            // Add directory entry
+            result.push({
+              id: `dir-${Date.now()}-${Math.random()}`,
+              name: item.name,
+              path: fullPath,
+              type: 'directory',
+              content: '',
+            })
+            // Recurse into subfolder
             const sub = await scan(fullPath)
             result.push(...sub)
           } else if (FILE_EXT.some(ext => item.name.endsWith(ext))) {
             const content = await Filesystem.readFile({
               path: fullPath,
               directory: Directory.ExternalStorage,
-              encoding: Encoding.UTF8
+              encoding: Encoding.UTF8,
             })
             result.push({
               id: Date.now() + Math.random(),
               name: item.name,
               path: fullPath,
-              content: content.data
+              type: 'file',
+              content: content.data,
             })
           }
         }
@@ -208,7 +231,11 @@ const HyeEditorCore = ({ session }) => {
 
       const loaded = await scan(folderPath)
       setFiles(loaded)
-      if (loaded.length > 0) setActiveId(loaded[0].id)
+      if (loaded.length > 0) {
+        // Find first file (not directory) to open
+        const firstFile = loaded.find(f => f.type === 'file')
+        if (firstFile) setActiveId(firstFile.id)
+      }
       setStatus('ready')
     } catch (e) {
       setStatus('load failed: ' + e.message)
@@ -230,11 +257,13 @@ const HyeEditorCore = ({ session }) => {
     }
     setShowProjectModal(false)
     setWorkspacePath(path)
+    setSelectedFolder(path) // default to root
     await loadWorkspace(path)
   }
 
   const closeProject = () => {
     setWorkspacePath('')
+    setSelectedFolder('')
     setFiles([])
     setActiveId(null)
     setExpandedFolders(new Set(['/']))
@@ -244,14 +273,14 @@ const HyeEditorCore = ({ session }) => {
   // ---------- File Operations ----------
   const saveFile = async (fileId) => {
     const file = files.find(f => f.id === fileId)
-    if (!file || !workspacePath) return
+    if (!file || !workspacePath || file.type === 'directory') return
     try {
       await Filesystem.writeFile({
         path: file.path,
         data: file.content,
         directory: Directory.ExternalStorage,
         encoding: Encoding.UTF8,
-        recursive: true
+        recursive: true,
       })
       setDirtyFiles(prev => {
         const n = new Set(prev)
@@ -261,54 +290,109 @@ const HyeEditorCore = ({ session }) => {
       setStatus('saved')
       setTimeout(() => setStatus('ready'), 1000)
     } catch (e) {
-      setStatus('save failed')
+      setStatus('save failed: ' + e.message)
     }
   }
 
   const createFile = async () => {
     if (!newItemName.trim() || !workspacePath) return
-    const name = newItemName.match(/\.(jsx?|html|css|json|md|txt)$/) ? newItemName : `${newItemName}.jsx`
-    const path = `${workspacePath}/${name}`
+
+    // Determine the target folder
+    let targetFolder = selectedFolder || workspacePath
+
+    // Ensure the folder exists
     try {
+      await Filesystem.mkdir({
+        path: targetFolder,
+        directory: Directory.ExternalStorage,
+        recursive: true,
+      })
+    } catch {}
+
+    const name = newItemName.match(/\.(jsx?|html|css|json|md|txt)$/) ? newItemName : `${newItemName}.jsx`
+    const path = `${targetFolder}/${name}`
+
+    try {
+      // Check if file already exists
+      try {
+        await Filesystem.readFile({
+          path: path,
+          directory: Directory.ExternalStorage,
+        })
+        setStatus('file already exists')
+        return
+      } catch {}
+
       await Filesystem.writeFile({
         path: path,
         data: '',
         directory: Directory.ExternalStorage,
         encoding: Encoding.UTF8,
-        recursive: true
+        recursive: true,
       })
       const newFile = {
         id: Date.now() + Math.random(),
         name,
         path,
-        content: ''
+        type: 'file',
+        content: '',
       }
       setFiles([...files, newFile])
       setActiveId(newFile.id)
       setNewItemName('')
       setShowNewFileModal(false)
       setStatus('file created')
+      // Expand the folder in tree
+      const folderPath = targetFolder.replace(workspacePath, '').replace(/^\/+/, '')
+      if (folderPath) {
+        setExpandedFolders(prev => new Set([...prev, folderPath]))
+      }
     } catch (e) {
-      setStatus('create failed')
+      setStatus('create failed: ' + e.message)
     }
   }
 
   const createFolder = async () => {
     if (!newItemName.trim() || !workspacePath) return
-    const path = `${workspacePath}/${newItemName}`
+
+    // Determine the target folder
+    let targetFolder = selectedFolder || workspacePath
+    const path = `${targetFolder}/${newItemName}`
+
     try {
+      // Check if folder already exists
+      try {
+        await Filesystem.readdir({
+          path: path,
+          directory: Directory.ExternalStorage,
+        })
+        setStatus('folder already exists')
+        return
+      } catch {}
+
       await Filesystem.mkdir({
         path: path,
         directory: Directory.ExternalStorage,
-        recursive: true
+        recursive: true,
       })
-      setStatus('folder created')
+
+      // Add to files state
+      const newFolder = {
+        id: `dir-${Date.now()}-${Math.random()}`,
+        name: newItemName,
+        path: path,
+        type: 'directory',
+        content: '',
+      }
+      setFiles([...files, newFolder])
       setNewItemName('')
       setShowNewFolderModal(false)
-      // Reload workspace to show the new folder in tree
-      await loadWorkspace(workspacePath)
+      setStatus('folder created')
+      // Expand the new folder in tree
+      const folderPath = path.replace(workspacePath, '').replace(/^\/+/, '')
+      setExpandedFolders(prev => new Set([...prev, folderPath]))
     } catch (e) {
-      setStatus('folder failed')
+      setStatus('folder failed: ' + e.message)
     }
   }
 
@@ -316,16 +400,27 @@ const HyeEditorCore = ({ session }) => {
     const file = files.find(f => f.id === fileId)
     if (!file || !workspacePath) return
     try {
-      await Filesystem.deleteFile({
-        path: file.path,
-        directory: Directory.ExternalStorage
-      })
+      if (file.type === 'directory') {
+        await Filesystem.rmdir({
+          path: file.path,
+          directory: Directory.ExternalStorage,
+          recursive: true,
+        })
+      } else {
+        await Filesystem.deleteFile({
+          path: file.path,
+          directory: Directory.ExternalStorage,
+        })
+      }
       const newFiles = files.filter(f => f.id !== fileId)
       setFiles(newFiles)
-      if (activeId === fileId && newFiles.length > 0) setActiveId(newFiles[0].id)
+      if (activeId === fileId && newFiles.length > 0) {
+        const firstFile = newFiles.find(f => f.type === 'file')
+        if (firstFile) setActiveId(firstFile.id)
+      }
       setStatus('deleted')
     } catch (e) {
-      setStatus('delete failed')
+      setStatus('delete failed: ' + e.message)
     }
   }
 
@@ -342,7 +437,7 @@ const HyeEditorCore = ({ session }) => {
       await Filesystem.rename({
         from: oldPath,
         to: newPath,
-        directory: Directory.ExternalStorage
+        directory: Directory.ExternalStorage,
       })
       setFiles(files.map(f =>
         f.id === renameFile.id ? { ...f, name: renameValue, path: newPath } : f
@@ -351,7 +446,7 @@ const HyeEditorCore = ({ session }) => {
       setRenameValue('')
       setStatus('renamed')
     } catch (e) {
-      setStatus('rename failed')
+      setStatus('rename failed: ' + e.message)
     }
   }
 
@@ -379,22 +474,24 @@ const HyeEditorCore = ({ session }) => {
       }
 
       const newFiles = []
+      const targetFolder = selectedFolder || workspacePath
       for (const file of fileList) {
         const content = await file.text()
         const fileName = file.name
-        const path = `${workspacePath}/${fileName}`
+        const path = `${targetFolder}/${fileName}`
         await Filesystem.writeFile({
           path: path,
           data: content,
           directory: Directory.ExternalStorage,
           encoding: Encoding.UTF8,
-          recursive: true
+          recursive: true,
         })
         const newFile = {
           id: Date.now() + Math.random(),
           name: fileName,
           path,
-          content
+          type: 'file',
+          content,
         }
         newFiles.push(newFile)
       }
@@ -404,12 +501,12 @@ const HyeEditorCore = ({ session }) => {
       setStatus(`imported ${newFiles.length} files`)
     } catch (e) {
       if (e.message !== 'canceled') {
-        setStatus('import failed')
+        setStatus('import failed: ' + e.message)
       }
     }
   }
 
-  // ---------- Editor Functions (unchanged) ----------
+  // ---------- Editor Functions ----------
   const handleChange = (value) => {
     setFiles(files.map(f => f.id === activeId ? { ...f, content: value } : f))
     setDirtyFiles(prev => new Set(prev).add(activeId))
@@ -520,7 +617,7 @@ const HyeEditorCore = ({ session }) => {
     setTimeout(() => setStatus('ready'), 1000)
   }
 
-  // ---------- AI Functions (unchanged) ----------
+  // ---------- AI Functions ----------
   const searchTemplateAI = async () => {
     if (!templateInput.trim()) return
     setStatus('HYE AI generating...')
@@ -575,7 +672,7 @@ const HyeEditorCore = ({ session }) => {
     }
   }
 
-    const searchAskAI = async () => {
+  const searchAskAI = async () => {
     if (!askInput.trim()) return
     setStatus('HYE AI thinking...')
     setAskResult(null)
@@ -603,10 +700,10 @@ const HyeEditorCore = ({ session }) => {
   }
 
   // ---------- Preview ----------
-   const runPreview = () => {
-    const htmlFile = files.find(f => f.name === 'index.html')
+  const runPreview = () => {
+    const htmlFile = files.find(f => f.name === 'index.html' && f.type === 'file')
     if (!htmlFile) return setStatus('no index.html')
-    const appFile = files.find(f => f.name === 'App.jsx')
+    const appFile = files.find(f => f.name === 'App.jsx' && f.type === 'file')
     if (!appFile) return setStatus('no App.jsx')
 
     const html = htmlFile.content.replace(
@@ -668,7 +765,6 @@ const HyeEditorCore = ({ session }) => {
   const buildTree = () => {
     const tree = {}
     files.forEach(f => {
-      // Remove workspacePath prefix from path to build tree
       let relPath = f.path
       if (workspacePath && f.path.startsWith(workspacePath)) {
         relPath = f.path.slice(workspacePath.length).replace(/^\/+/, '')
@@ -677,7 +773,11 @@ const HyeEditorCore = ({ session }) => {
       let current = tree
       parts.forEach((part, i) => {
         if (i === parts.length - 1) {
-          current[part] = { ...f, isFile: true }
+          if (f.type === 'directory') {
+            current[part] = { isFolder: true, children: {}, name: part, path: f.path }
+          } else {
+            current[part] = { ...f, isFile: true }
+          }
         } else {
           current[part] = current[part] || { isFolder: true, children: {} }
           current = current[part].children
@@ -700,7 +800,11 @@ const HyeEditorCore = ({ session }) => {
       const fullPath = path ? `${path}/${name}` : name
       if (item.isFile) {
         return (
-          <div key={item.id} className={`tree-item ${activeId === item.id ? 'active' : ''}`} onClick={() => setActiveId(item.id)}>
+          <div
+            key={item.id}
+            className={`tree-item ${activeId === item.id ? 'active' : ''}`}
+            onClick={() => setActiveId(item.id)}
+          >
             {name} {dirtyFiles.has(item.id) && '•'}
           </div>
         )
@@ -708,7 +812,13 @@ const HyeEditorCore = ({ session }) => {
       const expanded = expandedFolders.has(fullPath)
       return (
         <div key={fullPath}>
-          <div className="tree-folder" onClick={() => toggleFolder(fullPath)}>
+          <div
+            className="tree-folder"
+            onClick={() => {
+              toggleFolder(fullPath)
+              setSelectedFolder(item.path || `${workspacePath}/${fullPath}`)
+            }}
+          >
             {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />} {name}
           </div>
           {expanded && <div className="tree-children">{renderTree(item.children, fullPath)}</div>}
@@ -717,9 +827,9 @@ const HyeEditorCore = ({ session }) => {
     })
   }
 
-  const activeFile = files.find(f => f.id === activeId)
+  const activeFile = files.find(f => f.id === activeId && f.type === 'file')
 
-  // ---------- Render ----------
+    // ---------- Render ----------
   return (
     <div className="hye-editor">
       <style>{`
@@ -844,28 +954,31 @@ const HyeEditorCore = ({ session }) => {
           <div className="menu-item" onClick={() => { setShowHelpModal(true); setMenuOpen(false) }}><BookOpen size={16} /> HYE-HELP</div>
           <div className="menu-item" onClick={() => { setShowAskModal(true); setMenuOpen(false) }}><HelpCircle size={16} /> HYE-ASK</div>
           <div className="menu-divider" />
-          <a className="menu-item" href="https://your-terminal-url.com" target="_blank" style={{textDecoration: 'none', color: '#d4d4d4'}}><Terminal size={16} /> HYE Terminal</a>
+          <a className="menu-item" href="#" target="_blank" style={{textDecoration: 'none', color: '#d4d4d4'}}><Terminal size={16} /> HYE Terminal</a>
           <div className="menu-divider" />
           <div className="menu-item" onClick={() => { setShowConsole(!showConsole); setMenuOpen(false) }}>Console: {showConsole ? 'On' : 'Off'}</div>
           <div className="menu-item" onClick={() => { setAutoSave(!autoSave); setMenuOpen(false) }}>Auto-save: {autoSave ? 'On' : 'Off'}</div>
         </div>
       )}
-
-      {/* ----- Main Layout ----- */}
+             {/* ----- Main Layout ----- */}
       <div className="main">
         <div className={`sidebar ${!sidebarOpen ? 'collapsed' : ''}`}>
           <div className="sidebar-header">
             EXPLORER
             <div className="sidebar-actions">
-              <button onClick={() => setShowNewFileModal(true)} title="New File"><Plus size={14} /></button>
-              <button onClick={() => setShowNewFolderModal(true)} title="New Folder"><FolderPlus size={14} /></button>
+              <button onClick={() => { setShowNewFileModal(true); setMenuOpen(false) }} title="New File"><Plus size={14} /></button>
+              <button onClick={() => { setShowNewFolderModal(true); setMenuOpen(false) }} title="New Folder"><FolderPlus size={14} /></button>
               <button onClick={importFiles} title="Import Files"><Upload size={14} /></button>
               <button onClick={closeProject} title="Close Project"><X size={14} /></button>
             </div>
           </div>
           <div className="tree">
             {workspacePath ? (
-              renderTree(buildTree())
+              files.length > 0 ? (
+                renderTree(buildTree())
+              ) : (
+                <div style={{padding: 12, color: '#7d8590', fontSize: 12}}>No files or folders found</div>
+              )
             ) : (
               <div style={{padding: 12, color: '#7d8590', fontSize: 12}}>Open a project to start editing</div>
             )}
@@ -874,11 +987,11 @@ const HyeEditorCore = ({ session }) => {
 
         <div className="editor-area">
           <div className="tabs">
-            {files.map(f => (
+            {files.filter(f => f.type === 'file').map(f => (
               <div key={f.id} className={`tab ${activeId === f.id ? 'active' : ''}`} onClick={() => setActiveId(f.id)}>
                 {f.name}
                 {dirtyFiles.has(f.id) && '•'}
-                {files.length > 1 && <X size={12} onClick={(e) => { e.stopPropagation(); deleteFile(f.id) }} />}
+                {files.filter(f => f.type === 'file').length > 1 && <X size={12} onClick={(e) => { e.stopPropagation(); deleteFile(f.id) }} />}
               </div>
             ))}
           </div>
@@ -923,327 +1036,354 @@ const HyeEditorCore = ({ session }) => {
             )}
           </div>
 
-                {showConsole && (
-        <div className="panel">
-          <div className="panel-header">
-            CONSOLE
-            <button onClick={() => setShowConsole(false)} style={{background: 'none', border: 'none', color: '#ccc', cursor: 'pointer'}}><X size={14} /></button>
-          </div>
-          {consoleLogs.length === 0 ? (
-            <div style={{padding: 12, color: '#7d8590', fontSize: 12}}>Console output appears here...</div>
-          ) : consoleLogs.map((log, i) => (
-            <div key={i} className={`console-log console-${log.method}`}>
-              [{log.time}] {log.args.join(' ')}
+          {showConsole && (
+            <div className="panel">
+              <div className="panel-header">
+                CONSOLE
+                <button onClick={() => setShowConsole(false)} style={{background: 'none', border: 'none', color: '#ccc', cursor: 'pointer'}}><X size={14} /></button>
+              </div>
+              {consoleLogs.length === 0 ? (
+                <div style={{padding: 12, color: '#7d8590', fontSize: 12}}>Console output appears here...</div>
+              ) : consoleLogs.map((log, i) => (
+                <div key={i} className={`console-log console-${log.method}`}>
+                  [{log.time}] {log.args.join(' ')}
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+
+          {problems.length > 0 && !showConsole && (
+            <div className="panel">
+              <div className="panel-header">PROBLEMS ({problems.length})</div>
+              {problems.map((p, i) => (
+                <div key={i} className="problem-item" onClick={() => {
+                  const file = files.find(f => f.path === p.file && f.type === 'file')
+                  if (file) {
+                    setActiveId(file.id)
+                    setTimeout(() => {
+                      editorRef.current?.revealLineInCenter(p.line)
+                      editorRef.current?.setPosition({lineNumber: p.line, column: 1})
+                    }, 100)
+                  }
+                }}>
+                  <AlertCircle size={12} style={{display: 'inline', marginRight: 6, color: p.severity === 'error' ? '#ff6b6b' : '#ffd700'}} />
+                  {p.file}:{p.line} - {p.message}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+         {/* ----- Status Bar ----- */}
+      <div className="status-bar">
+        <span className="status-text">
+          <span className={`status-dot ${status === 'ready' ? 'active' : status === 'error' ? 'error' : 'busy'}`} />
+          {status}
+        </span>
+        {dirtyFiles.size > 0 && <span>| unsaved</span>}
+        <span>| Ln {editorRef.current?.getPosition()?.lineNumber || 1}</span>
+        <span>Col {editorRef.current?.getPosition()?.column || 1}</span>
+        <span style={{marginLeft: 'auto'}}>{workspacePath || 'no project'}</span>
+      </div>
+
+      {/* ----- Project Modal ----- */}
+      {showProjectModal && (
+        <div className="modal-overlay" onClick={() => setShowProjectModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Open / New Project</h3>
+              <button className="modal-close" onClick={() => setShowProjectModal(false)}><X size={16} /></button>
+            </div>
+            <div style={{padding: 12}}>
+              <p style={{color: '#7d8590', fontSize: 12, marginBottom: 8}}>
+                Enter the absolute path to your project folder.<br />
+                Example: <code>/storage/emulated/0/MyProject</code>
+                <br />If the folder doesn't exist, it will be created.
+              </p>
+              <input
+                value={projectInput}
+                onChange={e => setProjectInput(e.target.value)}
+                placeholder="/storage/emulated/0/MyProject"
+                onKeyDown={e => e.key === 'Enter' && confirmOpenProject()}
+                autoFocus
+                style={{width: '100%', padding: 8, background: '#1e1e1e', border: '1px solid #3c3c3c', color: '#d4d4d4', borderRadius: 3, boxSizing: 'border-box'}}
+              />
+            </div>
+            <div style={{display: 'flex', gap: 8, padding: 12, borderTop: '1px solid #3c3c3c'}}>
+              <button onClick={confirmOpenProject} style={{flex: 1, padding: 8, background: '#58a6ff', border: 'none', borderRadius: 4, color: '#000', cursor: 'pointer'}}>
+                Open
+              </button>
+              <button onClick={() => setShowProjectModal(false)} style={{padding: 8, background: '#3c3c3c', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer'}}>
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
-      {problems.length > 0 && !showConsole && (
-        <div className="panel">
-          <div className="panel-header">PROBLEMS ({problems.length})</div>
-          {problems.map((p, i) => (
-            <div key={i} className="problem-item" onClick={() => {
-              const file = files.find(f => f.path === p.file)
-              if (file) {
-                setActiveId(file.id)
-                setTimeout(() => {
-                  editorRef.current?.revealLineInCenter(p.line)
-                  editorRef.current?.setPosition({lineNumber: p.line, column: 1})
-                }, 100)
-              }
-            }}>
-              <AlertCircle size={12} style={{display: 'inline', marginRight: 6, color: p.severity === 'error' ? '#ff6b6b' : '#ffd700'}} />
-              {p.file}:{p.line} - {p.message}
+      {/* ----- New File Modal ----- */}
+      {showNewFileModal && (
+        <div className="modal-overlay" onClick={() => setShowNewFileModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>New File</h3>
+              <button className="modal-close" onClick={() => setShowNewFileModal(false)}><X size={16} /></button>
             </div>
-          ))}
+            <div style={{padding: 12}}>
+              <p style={{color: '#7d8590', fontSize: 12, marginBottom: 8}}>
+                Creating in: <code>{selectedFolder || workspacePath}</code>
+              </p>
+              <input
+                value={newItemName}
+                onChange={e => setNewItemName(e.target.value)}
+                placeholder="App.jsx"
+                onKeyDown={e => e.key === 'Enter' && createFile()}
+                autoFocus
+                style={{width: '100%', padding: 8, background: '#1e1e1e', border: '1px solid #3c3c3c', color: '#d4d4d4', borderRadius: 3, boxSizing: 'border-box'}}
+              />
+            </div>
+            <div style={{display: 'flex', gap: 8, padding: 12, borderTop: '1px solid #3c3c3c'}}>
+              <button onClick={createFile} style={{flex: 1, padding: 8, background: '#58a6ff', border: 'none', borderRadius: 4, color: '#000', cursor: 'pointer'}}>
+                Create
+              </button>
+              <button onClick={() => setShowNewFileModal(false)} style={{padding: 8, background: '#3c3c3c', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer'}}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ----- New Folder Modal ----- */}
+      {showNewFolderModal && (
+        <div className="modal-overlay" onClick={() => setShowNewFolderModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>New Folder</h3>
+              <button className="modal-close" onClick={() => setShowNewFolderModal(false)}><X size={16} /></button>
+            </div>
+            <div style={{padding: 12}}>
+              <p style={{color: '#7d8590', fontSize: 12, marginBottom: 8}}>
+                Creating in: <code>{selectedFolder || workspacePath}</code>
+              </p>
+              <input
+                value={newItemName}
+                onChange={e => setNewItemName(e.target.value)}
+                placeholder="components"
+                onKeyDown={e => e.key === 'Enter' && createFolder()}
+                autoFocus
+                style={{width: '100%', padding: 8, background: '#1e1e1e', border: '1px solid #3c3c3c', color: '#d4d4d4', borderRadius: 3, boxSizing: 'border-box'}}
+              />
+            </div>
+            <div style={{display: 'flex', gap: 8, padding: 12, borderTop: '1px solid #3c3c3c'}}>
+              <button onClick={createFolder} style={{flex: 1, padding: 8, background: '#58a6ff', border: 'none', borderRadius: 4, color: '#000', cursor: 'pointer'}}>
+                Create
+              </button>
+              <button onClick={() => setShowNewFolderModal(false)} style={{padding: 8, background: '#3c3c3c', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer'}}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+         {/* ----- Rename Modal ----- */}
+      {renameFile && (
+        <div className="modal-overlay" onClick={() => setRenameFile(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Rename {renameFile.type === 'directory' ? 'Folder' : 'File'}</h3>
+              <button className="modal-close" onClick={() => setRenameFile(null)}><X size={16} /></button>
+            </div>
+            <div style={{padding: 12}}>
+              <input
+                value={renameValue}
+                onChange={e => setRenameValue(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && confirmRename()}
+                autoFocus
+                style={{width: '100%', padding: 8, background: '#1e1e1e', border: '1px solid #3c3c3c', color: '#d4d4d4', borderRadius: 3, boxSizing: 'border-box'}}
+              />
+            </div>
+            <div style={{display: 'flex', gap: 8, padding: 12, borderTop: '1px solid #3c3c3c'}}>
+              <button onClick={confirmRename} style={{flex: 1, padding: 8, background: '#58a6ff', border: 'none', borderRadius: 4, color: '#000', cursor: 'pointer'}}>
+                Rename
+              </button>
+              <button onClick={() => setRenameFile(null)} style={{padding: 8, background: '#3c3c3c', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer'}}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ----- Template Modal ----- */}
+      {showTemplateModal && (
+        <div className="modal-overlay" onClick={() => { setShowTemplateModal(false); setTemplateResult(null); setTemplateInput(''); setTemplateSearch('') }}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Templates</h3>
+              <button className="modal-close" onClick={() => { setShowTemplateModal(false); setTemplateResult(null); setTemplateInput(''); setTemplateSearch('') }}><X size={16} /></button>
+            </div>
+            <div className="modal-search">
+              <input
+                placeholder="Ask AI: e.g. dashboard with charts..."
+                value={templateInput}
+                onChange={e => setTemplateInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && searchTemplateAI()}
+              />
+              <button onClick={searchTemplateAI}><Search size={16} /> AI</button>
+            </div>
+            {templateResult && (
+              <div className="modal-result">
+                <div className="modal-result-header">
+                  <strong>{templateResult.name}</strong>
+                  <span style={{fontSize: 11, color: '#58a6ff'}}>{templateResult.source === 'ai' ? 'AI' : 'Local'}</span>
+                </div>
+                <div className="modal-result-desc">{templateResult.desc}</div>
+                <pre>{templateResult.code}</pre>
+                <div className="modal-actions">
+                  <button className="primary" onClick={() => { insertCode(templateResult.code); setShowTemplateModal(false) }}>
+                    <FileCode size={14} /> Insert
+                  </button>
+                  <button onClick={() => copyToClipboard(templateResult.code)}>
+                    <Copy size={14} /> Copy
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="menu-divider" style={{margin: '12px 0'}} />
+            <input
+              placeholder="Filter local templates..."
+              value={templateSearch}
+              onChange={e => setTemplateSearch(e.target.value)}
+              style={{width: '100%', marginBottom: 8}}
+            />
+            <div style={{maxHeight: '250px', overflowY: 'auto'}}>
+              {templates
+                .filter(t => t.name.toLowerCase().includes(templateSearch.toLowerCase()))
+                .map((t, i) => (
+                  <div key={i} className="menu-item" onClick={() => { insertCode(t.code); setShowTemplateModal(false) }}>
+                    <FileCode size={14} /> {t.name}
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ----- Help Modal ----- */}
+      {showHelpModal && (
+        <div className="modal-overlay" onClick={() => { setShowHelpModal(false); setHelpResult(null); setHelpInput(''); setHelpSearch('') }}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>HYE-HELP</h3>
+              <button className="modal-close" onClick={() => { setShowHelpModal(false); setHelpResult(null); setHelpInput(''); setHelpSearch('') }}><X size={16} /></button>
+            </div>
+            <div className="modal-search">
+              <input
+                placeholder="Ask AI: e.g. async await error handling..."
+                value={helpInput}
+                onChange={e => setHelpInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && searchHelpAI()}
+              />
+              <button onClick={searchHelpAI}><Search size={16} /> AI</button>
+            </div>
+            {helpResult && (
+              <div className="modal-result">
+                <div className="modal-result-header">
+                  <strong>{helpResult.name}</strong>
+                  <span style={{fontSize: 11, color: '#58a6ff'}}>{helpResult.source === 'ai' ? 'AI' : 'Local'}</span>
+                </div>
+                <div className="modal-result-desc">{helpResult.desc}</div>
+                <pre>{helpResult.code}</pre>
+                <div className="modal-actions">
+                  <button className="primary" onClick={() => { insertCode(helpResult.code); setShowHelpModal(false) }}>
+                    <FileCode size={14} /> Insert
+                  </button>
+                  <button onClick={() => copyToClipboard(helpResult.code)}>
+                    <Copy size={14} /> Copy
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="menu-divider" style={{margin: '12px 0'}} />
+            <input
+              placeholder="Filter local help..."
+              value={helpSearch}
+              onChange={e => setHelpSearch(e.target.value)}
+              style={{width: '100%', marginBottom: 8}}
+            />
+            <div style={{maxHeight: '250px', overflowY: 'auto'}}>
+              {syntaxHelp
+                .filter(h => h.name.toLowerCase().includes(helpSearch.toLowerCase()))
+                .map((h, i) => (
+                  <div key={i} className="menu-item" onClick={() => { insertCode(h.code); setShowHelpModal(false) }}>
+                    <BookOpen size={14} /> {h.name}
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
+        {/* ----- Ask Modal ----- */}
+      {showAskModal && (
+        <div className="modal-overlay" onClick={() => { setShowAskModal(false); setAskResult(null); setAskInput(''); setAskSearch('') }}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>HYE-ASK</h3>
+              <button className="modal-close" onClick={() => { setShowAskModal(false); setAskResult(null); setAskInput(''); setAskSearch('') }}><X size={16} /></button>
+            </div>
+            <div className="modal-search">
+              <input
+                placeholder="Ask AI: e.g. how does useCallback work..."
+                value={askInput}
+                onChange={e => setAskInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && searchAskAI()}
+              />
+              <button onClick={searchAskAI}><Search size={16} /> AI</button>
+            </div>
+            {askResult && (
+              <div className="modal-result">
+                <div className="modal-result-header">
+                  <strong>{askResult.name}</strong>
+                  <span style={{fontSize: 11, color: '#58a6ff'}}>{askResult.source === 'ai' ? 'AI' : 'Local'}</span>
+                </div>
+                <div className="modal-result-desc">{askResult.desc}</div>
+                <pre>{askResult.code}</pre>
+                <div className="modal-actions">
+                  <button onClick={() => copyToClipboard(askResult.code)}>
+                    <Copy size={14} /> Copy Code
+                  </button>
+                  <button onClick={() => copyToClipboard(askResult.desc)}>
+                    <Copy size={14} /> Copy Explanation
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="menu-divider" style={{margin: '12px 0'}} />
+            <input
+              placeholder="Filter local terms..."
+              value={askSearch}
+              onChange={e => setAskSearch(e.target.value)}
+              style={{width: '100%', marginBottom: 8}}
+            />
+            <div style={{maxHeight: '250px', overflowY: 'auto'}}>
+              {terms
+                .filter(t => t.name.toLowerCase().includes(askSearch.toLowerCase()))
+                .map((t, i) => (
+                  <div key={i} className="menu-item" onClick={() => {
+                    setAskResult({ name: t.name, code: `// ${t.name}\n// ${t.desc}`, desc: t.desc, source: 'local' })
+                  }}>
+                    <HelpCircle size={14} /> {t.name}
+                  </div>
+                ))}
+            </div>
+          </div>
         </div>
       )}
     </div>
-  </div>
-
-  {/* ----- Status Bar ----- */}
-  <div className="status-bar">
-    <span className="status-text">
-      <span className={`status-dot ${status === 'ready' ? 'active' : status === 'error' ? 'error' : 'busy'}`} />
-      {status}
-    </span>
-    {dirtyFiles.size > 0 && <span>| unsaved</span>}
-    <span>| Ln {editorRef.current?.getPosition()?.lineNumber || 1}</span>
-    <span>Col {editorRef.current?.getPosition()?.column || 1}</span>
-    <span style={{marginLeft: 'auto'}}>{workspacePath || 'no project'}</span>
-  </div>
-
-  {/* ----- Project Modal (Open / New) ----- */}
-  {showProjectModal && (
-    <div className="modal-overlay" onClick={() => setShowProjectModal(false)}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Open / New Project</h3>
-          <button className="modal-close" onClick={() => setShowProjectModal(false)}><X size={16} /></button>
-        </div>
-        <div style={{padding: 12}}>
-          <p style={{color: '#7d8590', fontSize: 12, marginBottom: 8}}>
-            Enter the absolute path to your project folder.<br />
-            Example: <code>/storage/emulated/0/MyProject</code>
-            <br />If the folder doesn't exist, it will be created.
-          </p>
-          <input
-            value={projectInput}
-            onChange={e => setProjectInput(e.target.value)}
-            placeholder="/storage/emulated/0/MyProject"
-            onKeyDown={e => e.key === 'Enter' && confirmOpenProject()}
-            autoFocus
-            style={{width: '100%', padding: 8, background: '#1e1e1e', border: '1px solid #3c3c3c', color: '#d4d4d4', borderRadius: 3, boxSizing: 'border-box'}}
-          />
-        </div>
-        <div style={{display: 'flex', gap: 8, padding: 12, borderTop: '1px solid #3c3c3c'}}>
-          <button onClick={confirmOpenProject} style={{flex: 1, padding: 8, background: '#58a6ff', border: 'none', borderRadius: 4, color: '#000', cursor: 'pointer'}}>
-            Open
-          </button>
-          <button onClick={() => setShowProjectModal(false)} style={{padding: 8, background: '#3c3c3c', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer'}}>
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  )}
-
-  {/* ----- Other Modals (unchanged) ----- */}
-  {renameFile && (
-    <div className="modal-overlay" onClick={() => setRenameFile(null)}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <h3 style={{marginTop: 0}}>Rename File</h3>
-        <input
-          value={renameValue}
-          onChange={e => setRenameValue(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && confirmRename()}
-          autoFocus
-        />
-        <div style={{display: 'flex', gap: 8, marginTop: 12}}>
-          <button onClick={confirmRename} style={{flex: 1, padding: 8, background: '#58a6ff', border: 'none', borderRadius: 4, color: '#000', cursor: 'pointer'}}>
-            Rename
-          </button>
-          <button onClick={() => setRenameFile(null)} style={{padding: 8, background: '#3c3c3c', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer'}}>
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  )}
-
-  {showNewFileModal && (
-    <div className="modal-overlay" onClick={() => setShowNewFileModal(false)}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <h3>New File</h3>
-        <input
-          value={newItemName}
-          onChange={e => setNewItemName(e.target.value)}
-          placeholder="App.jsx"
-          onKeyDown={e => e.key === 'Enter' && createFile()}
-          autoFocus
-        />
-        <div style={{display: 'flex', gap: 8, marginTop: 12}}>
-          <button onClick={createFile} style={{flex: 1, padding: 8, background: '#58a6ff', border: 'none', borderRadius: 4, color: '#000', cursor: 'pointer'}}>
-            Create
-          </button>
-          <button onClick={() => setShowNewFileModal(false)} style={{padding: 8, background: '#3c3c3c', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer'}}>
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  )}
-
-  {showNewFolderModal && (
-    <div className="modal-overlay" onClick={() => setShowNewFolderModal(false)}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <h3>New Folder</h3>
-        <input
-          value={newItemName}
-          onChange={e => setNewItemName(e.target.value)}
-          placeholder="components"
-          onKeyDown={e => e.key === 'Enter' && createFolder()}
-          autoFocus
-        />
-        <div style={{display: 'flex', gap: 8, marginTop: 12}}>
-          <button onClick={createFolder} style={{flex: 1, padding: 8, background: '#58a6ff', border: 'none', borderRadius: 4, color: '#000', cursor: 'pointer'}}>
-            Create
-          </button>
-          <button onClick={() => setShowNewFolderModal(false)} style={{padding: 8, background: '#3c3c3c', border: 'none', borderRadius: 4, color: '#ccc', cursor: 'pointer'}}>
-            Cancel
-          </button>
-        </div>
-      </div>
-    </div>
-  )}
-
-  {showTemplateModal && (
-    <div className="modal-overlay" onClick={() => { setShowTemplateModal(false); setTemplateResult(null); setTemplateInput(''); setTemplateSearch('') }}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>Templates</h3>
-          <button className="modal-close" onClick={() => { setShowTemplateModal(false); setTemplateResult(null); setTemplateInput(''); setTemplateSearch('') }}><X size={16} /></button>
-        </div>
-        <div className="modal-search">
-          <input
-            placeholder="Ask AI: e.g. dashboard with charts..."
-            value={templateInput}
-            onChange={e => setTemplateInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && searchTemplateAI()}
-          />
-          <button onClick={searchTemplateAI}><Search size={16} /> AI</button>
-        </div>
-        {templateResult && (
-          <div className="modal-result">
-            <div className="modal-result-header">
-              <strong>{templateResult.name}</strong>
-              <span style={{fontSize: 11, color: '#58a6ff'}}>{templateResult.source === 'ai' ? 'AI' : 'Local'}</span>
-            </div>
-            <div className="modal-result-desc">{templateResult.desc}</div>
-            <pre>{templateResult.code}</pre>
-            <div className="modal-actions">
-              <button className="primary" onClick={() => { insertCode(templateResult.code); setShowTemplateModal(false) }}>
-                <FileCode size={14} /> Insert
-              </button>
-              <button onClick={() => copyToClipboard(templateResult.code)}>
-                <Copy size={14} /> Copy
-              </button>
-            </div>
-          </div>
-        )}
-        <div className="menu-divider" style={{margin: '12px 0'}} />
-        <input
-          placeholder="Filter local templates..."
-          value={templateSearch}
-          onChange={e => setTemplateSearch(e.target.value)}
-          style={{width: '100%', marginBottom: 8}}
-        />
-        <div style={{maxHeight: '250px', overflowY: 'auto'}}>
-          {templates
-            .filter(t => t.name.toLowerCase().includes(templateSearch.toLowerCase()))
-            .map((t, i) => (
-              <div key={i} className="menu-item" onClick={() => { insertCode(t.code); setShowTemplateModal(false) }}>
-                <FileCode size={14} /> {t.name}
-              </div>
-            ))}
-        </div>
-      </div>
-    </div>
-  )}
-
-  {showHelpModal && (
-    <div className="modal-overlay" onClick={() => { setShowHelpModal(false); setHelpResult(null); setHelpInput(''); setHelpSearch('') }}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>HYE-HELP</h3>
-          <button className="modal-close" onClick={() => { setShowHelpModal(false); setHelpResult(null); setHelpInput(''); setHelpSearch('') }}><X size={16} /></button>
-        </div>
-        <div className="modal-search">
-          <input
-            placeholder="Ask AI: e.g. async await error handling..."
-            value={helpInput}
-            onChange={e => setHelpInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && searchHelpAI()}
-          />
-          <button onClick={searchHelpAI}><Search size={16} /> AI</button>
-        </div>
-        {helpResult && (
-          <div className="modal-result">
-            <div className="modal-result-header">
-              <strong>{helpResult.name}</strong>
-              <span style={{fontSize: 11, color: '#58a6ff'}}>{helpResult.source === 'ai' ? 'AI' : 'Local'}</span>
-            </div>
-            <div className="modal-result-desc">{helpResult.desc}</div>
-            <pre>{helpResult.code}</pre>
-            <div className="modal-actions">
-              <button className="primary" onClick={() => { insertCode(helpResult.code); setShowHelpModal(false) }}>
-                <FileCode size={14} /> Insert
-              </button>
-              <button onClick={() => copyToClipboard(helpResult.code)}>
-                <Copy size={14} /> Copy
-              </button>
-            </div>
-          </div>
-        )}
-        <div className="menu-divider" style={{margin: '12px 0'}} />
-        <input
-          placeholder="Filter local help..."
-          value={helpSearch}
-          onChange={e => setHelpSearch(e.target.value)}
-          style={{width: '100%', marginBottom: 8}}
-        />
-        <div style={{maxHeight: '250px', overflowY: 'auto'}}>
-          {syntaxHelp
-            .filter(h => h.name.toLowerCase().includes(helpSearch.toLowerCase()))
-            .map((h, i) => (
-              <div key={i} className="menu-item" onClick={() => { insertCode(h.code); setShowHelpModal(false) }}>
-                <BookOpen size={14} /> {h.name}
-              </div>
-            ))}
-        </div>
-      </div>
-    </div>
-  )}
-
-  {showAskModal && (
-    <div className="modal-overlay" onClick={() => { setShowAskModal(false); setAskResult(null); setAskInput(''); setAskSearch('') }}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <h3>HYE-ASK</h3>
-          <button className="modal-close" onClick={() => { setShowAskModal(false); setAskResult(null); setAskInput(''); setAskSearch('') }}><X size={16} /></button>
-        </div>
-        <div className="modal-search">
-          <input
-            placeholder="Ask AI: e.g. how does useCallback work..."
-            value={askInput}
-            onChange={e => setAskInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && searchAskAI()}
-          />
-          <button onClick={searchAskAI}><Search size={16} /> AI</button>
-        </div>
-        {askResult && (
-          <div className="modal-result">
-            <div className="modal-result-header">
-              <strong>{askResult.name}</strong>
-              <span style={{fontSize: 11, color: '#58a6ff'}}>{askResult.source === 'ai' ? 'AI' : 'Local'}</span>
-            </div>
-            <div className="modal-result-desc">{askResult.desc}</div>
-            <pre>{askResult.code}</pre>
-            <div className="modal-actions">
-              <button onClick={() => copyToClipboard(askResult.code)}>
-                <Copy size={14} /> Copy Code
-              </button>
-              <button onClick={() => copyToClipboard(askResult.desc)}>
-                <Copy size={14} /> Copy Explanation
-              </button>
-            </div>
-          </div>
-        )}
-        <div className="menu-divider" style={{margin: '12px 0'}} />
-        <input
-          placeholder="Filter local terms..."
-          value={askSearch}
-          onChange={e => setAskSearch(e.target.value)}
-          style={{width: '100%', marginBottom: 8}}
-        />
-        <div style={{maxHeight: '250px', overflowY: 'auto'}}>
-          {terms
-            .filter(t => t.name.toLowerCase().includes(askSearch.toLowerCase()))
-            .map((t, i) => (
-              <div key={i} className="menu-item" onClick={() => {
-                setAskResult({ name: t.name, code: `// ${t.name}\n// ${t.desc}`, desc: t.desc, source: 'local' })
-              }}>
-                <HelpCircle size={14} /> {t.name}
-              </div>
-            ))}
-        </div>
-      </div>
-    </div>
-  )}
-</div>
-);
+  )
 }
+
 // ---------- Error Boundary ----------
 const ErrorBoundary = ({ children }) => {
   const [hasError, setHasError] = useState(false)
@@ -1311,5 +1451,4 @@ const HyeEditor = () => {
   )
 }
 
-
-export default HyeEditor;
+export default HyeEditor
