@@ -1255,3 +1255,4 @@ const HyeEditorCore = ({ session }) => {
     </div>
   )}
 </div>
+);
