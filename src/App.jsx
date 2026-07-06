@@ -11,24 +11,11 @@ import { terms } from './terms.js'
 
 const FILE_EXT = ['.js', '.jsx', '.ts', '.tsx', '.html', '.css', '.json', '.md', '.txt']
 
-// ---------- Supabase with fallback ----------
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || ''
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
-let supabase
-try {
-  supabase = createClient(supabaseUrl, supabaseKey)
-} catch {
-  supabase = {
-    auth: {
-      getSession: async () => ({ data: { session: null } }),
-      signInWithPassword: async () => ({ error: 'Supabase not configured' }),
-      signUp: async () => ({ error: 'Supabase not configured' }),
-      signOut: async () => {},
-      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
-    }
-  }
-}
-
+// ---------- Supabase ----------
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+)
 // ---------- Login Screen ----------
 const LoginScreen = ({ onLogin }) => {
   const [email, setEmail] = useState('')
