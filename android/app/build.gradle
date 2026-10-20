@@ -59,20 +59,26 @@ android {
     }
 }
 
+// Resolve only the Local AI AAR here. Resolving the whole Android runtime
+// classpath also resolves Capacitor project variants and can be ambiguous.
+configurations {
+    localAiAar {
+        canBeConsumed = false
+        canBeResolved = true
+        transitive = false
+    }
+}
+
+dependencies {
+    localAiAar 'dev.ffmpegkit-maintained:llama-android:0.1.1@aar'
+}
+
 def localAiAssetsDir = file("$projectDir/src/main/assets/local-ai-libs")
 tasks.register('stageLocalAiLibraries', Copy) {
-    // Android Gradle Plugin creates variant-specific classpaths; there is no
-    // generic 'runtimeClasspath' configuration in this Android application.
     from {
-        def runtimeConfig = configurations.findByName('debugRuntimeClasspath')
-        if (runtimeConfig == null) {
-            throw new GradleException('debugRuntimeClasspath was not created; cannot stage optional Local AI libraries.')
+        configurations.localAiAar.collect { aar ->
+            zipTree(aar).matching { include 'jni/**/*.so' }
         }
-        runtimeConfig.resolvedConfiguration.resolvedArtifacts
-            .findAll { it.file.name.endsWith('.aar') }
-            .collect { artifact ->
-                zipTree(artifact.file).matching { include 'jni/**/*.so' }
-            }
     }
     eachFile { details ->
         // AAR path jni/arm64-v8a/libname.so -> assets/local-ai-libs/arm64-v8a/libname.so
