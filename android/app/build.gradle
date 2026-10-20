@@ -61,10 +61,18 @@ android {
 
 def localAiAssetsDir = file("$projectDir/src/main/assets/local-ai-libs")
 tasks.register('stageLocalAiLibraries', Copy) {
+    // Android Gradle Plugin creates variant-specific classpaths; there is no
+    // generic 'runtimeClasspath' configuration in this Android application.
     from {
-        configurations.runtimeClasspath.findAll { it.name.endsWith('.aar') }.collect { aar ->
-            zipTree(aar).matching { include 'jni/**/*.so' }
+        def runtimeConfig = configurations.findByName('debugRuntimeClasspath')
+        if (runtimeConfig == null) {
+            throw new GradleException('debugRuntimeClasspath was not created; cannot stage optional Local AI libraries.')
         }
+        runtimeConfig.resolvedConfiguration.resolvedArtifacts
+            .findAll { it.file.name.endsWith('.aar') }
+            .collect { artifact ->
+                zipTree(artifact.file).matching { include 'jni/**/*.so' }
+            }
     }
     eachFile { details ->
         // AAR path jni/arm64-v8a/libname.so -> assets/local-ai-libs/arm64-v8a/libname.so
