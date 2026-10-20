@@ -1,0 +1,11 @@
+{
+  "appId": "com.hye.editor",
+  "appName": "Hyecode",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "plugins": {
+    "Filesystem": {
+      "android": {}
+    }
+  }
+}

@@ -1,0 +1,87 @@
+apply plugin: 'com.android.application'
+apply plugin: 'org.jetbrains.kotlin.android'
+
+android {
+    namespace = "com.hye.editor"
+    compileSdk = rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.hye.editor"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+    // On-device GGUF inference; model weights are downloaded separately, never bundled in the APK.
+    // The native AI engine is retained as a dependency, but its .so files are packaged as assets
+    // so Android can install Hyecode on devices whose ABI does not match the AI engine.
+    implementation 'dev.ffmpegkit-maintained:llama-android:0.1.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
+}
+
+
+// Keep optional native AI libraries out of Android's ABI-checked lib/ directory.
+// They are copied into assets and loaded only on compatible devices at runtime.
+android {
+    packaging {
+        jniLibs {
+            excludes += ['**/*.so']
+        }
+    }
+}
+
+def localAiAssetsDir = file("$projectDir/src/main/assets/local-ai-libs")
+tasks.register('stageLocalAiLibraries', Copy) {
+    from {
+        configurations.runtimeClasspath.findAll { it.name.endsWith('.aar') }.collect { aar ->
+            zipTree(aar).matching { include 'jni/**/*.so' }
+        }
+    }
+    eachFile { details ->
+        // AAR path jni/arm64-v8a/libname.so -> assets/local-ai-libs/arm64-v8a/libname.so
+        details.path = details.path.replaceFirst(/^jni\//, '')
+    }
+    includeEmptyDirs = false
+    into localAiAssetsDir
+}
+tasks.named('preBuild').configure { dependsOn('stageLocalAiLibraries') }
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
