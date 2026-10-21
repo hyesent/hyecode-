@@ -1243,3 +1243,193 @@ input, textarea, select {
   .ai-overlay .ai-fix-review-actions .pill,
   .ai-overlay .ai-fix-review-actions .btn-main { padding: 8px 12px; font-size: 11px; }
 }
+
+/* Final mobile layout corrections: uncluttered AI headers and fully styled close controls. */
+.ai-overlay .ai-chat-screen .modal-header.ai-chat-header {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 10px !important;
+  padding: 12px 14px 10px !important;
+}
+.ai-overlay .ai-chat-screen .ai-chat-topline {
+  display: flex !important;
+  align-items: center !important;
+  gap: 9px !important;
+  width: 100%;
+  min-width: 0;
+}
+.ai-overlay .ai-chat-screen .ai-chat-heading {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+.ai-overlay .ai-chat-screen .ai-chat-heading h3 {
+  font-size: 13px !important;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+.ai-overlay .ai-chat-screen .ai-chat-heading .ai-subtitle {
+  display: block;
+  max-width: none !important;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  font-size: 10px !important;
+  line-height: 1.4;
+}
+.ai-overlay .ai-chat-screen .ai-chat-topline .ai-back-button {
+  flex: 0 0 auto;
+  min-height: 38px !important;
+  padding: 8px 12px !important;
+  border-radius: 999px !important;
+  white-space: nowrap;
+}
+.ai-overlay .ai-chat-screen .ai-chat-topline .ai-close-button {
+  flex: 0 0 38px !important;
+  width: 38px !important;
+  min-width: 38px !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  margin-left: 0 !important;
+}
+.ai-overlay .ai-chat-screen .ai-chat-actions-row {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+.ai-overlay .ai-chat-screen .ai-chat-actions-row .pill {
+  min-height: 36px !important;
+  padding: 7px 15px !important;
+  border-radius: 999px !important;
+  white-space: nowrap;
+}
+/* Avoid square, cramped info blocks in the cloud/local screens. */
+.ai-overlay .ai-chat-screen .modal-content > div:nth-child(2) > div,
+.ai-overlay .ai-chat-screen .modal-content > div:nth-child(2) > form,
+.ai-overlay .ai-chat-screen .modal-content > div:nth-child(2) > div > div {
+  border-radius: 16px;
+}
+.ai-overlay .ai-chat-screen .modal-content > div:nth-child(2) > div[style*="border: 1px solid"],
+.ai-overlay .ai-chat-screen .modal-content > div:nth-child(2) > div[style*="border:1px solid"] {
+  border-radius: 18px !important;
+}
+.ai-overlay .ai-chat-screen .modal-content > div:nth-child(2) > .pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 999px !important;
+  padding: 8px 14px;
+}
+/* Offline Help: pill-shaped back/navigation and round close button. */
+.ai-overlay .offline-help-header {
+  display: flex !important;
+  align-items: center !important;
+  gap: 9px !important;
+  padding: 12px !important;
+  min-width: 0;
+}
+.ai-overlay .offline-help-back {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px !important;
+  padding: 8px 13px !important;
+  border-radius: 999px !important;
+  border: 1px solid #393939 !important;
+  background: #101010 !important;
+  color: #f2f2f2 !important;
+  white-space: nowrap;
+}
+.ai-overlay .offline-help-heading { flex: 1 1 auto; min-width: 0; }
+.ai-overlay .offline-help-heading h3 { font-size: 12px !important; line-height: 1.35; }
+.ai-overlay .offline-help-heading .ai-subtitle { max-width: none; overflow-wrap: anywhere; }
+.ai-overlay .offline-help-close,
+.ai-overlay .fixing-tools-close {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 38px !important;
+  width: 38px !important;
+  min-width: 38px !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 !important;
+  border: 1px solid #4a4a4a !important;
+  border-radius: 50% !important;
+  background: #111 !important;
+  color: #f5f5f5 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 3px 10px rgba(0,0,0,.3);
+  cursor: pointer;
+}
+.ai-overlay .offline-help-close svg,
+.ai-overlay .fixing-tools-close svg { width: 18px; height: 18px; stroke-width: 2.4; }
+.ai-overlay .offline-help-close:active,
+.ai-overlay .fixing-tools-close:active { transform: scale(.95); background: #252525 !important; }
+.ai-overlay .bot-nav {
+  display: flex !important;
+  gap: 6px !important;
+  margin: 8px 12px 0 !important;
+  padding: 5px !important;
+  border-radius: 999px !important;
+  background: #070707 !important;
+  border: 1px solid #292929 !important;
+}
+.ai-overlay .bot-nav button {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 36px;
+  padding: 8px 10px !important;
+  border-radius: 999px !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  color: #a6a6a6 !important;
+}
+.ai-overlay .bot-nav button.active {
+  background: #202020 !important;
+  border-color: #4a4a4a !important;
+  color: #fff !important;
+}
+/* Fixing Tools close button previously inherited a generic, unstyled button appearance. */
+.fixing-tools-modal .fixing-tools-header { display: flex; align-items: center; gap: 10px; }
+.fixing-tools-modal .fixing-tools-header h3 { flex: 1; min-width: 0; }
+.fixing-tools-modal .fixing-tools-close {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 38px;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0;
+  border: 1px solid #484848;
+  border-radius: 50%;
+  background: #111;
+  color: #f4f4f4;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 3px 10px rgba(0,0,0,.3);
+  cursor: pointer;
+}
+.fixing-tools-modal .fixing-tools-close svg { width: 18px; height: 18px; stroke-width: 2.4; }
+.fixing-tools-modal .fixing-tools-close:active { transform: scale(.95); background: #242424; }
+@media (max-width: 380px) {
+  .ai-overlay .ai-chat-screen .modal-header.ai-chat-header { padding: 10px !important; gap: 9px !important; }
+  .ai-overlay .ai-chat-screen .ai-chat-topline { gap: 7px !important; }
+  .ai-overlay .ai-chat-screen .ai-chat-topline .ai-back-button { padding: 7px 10px !important; font-size: 10px; }
+  .ai-overlay .ai-chat-screen .ai-chat-heading h3 { font-size: 12px !important; }
+  .ai-overlay .ai-chat-screen .ai-chat-topline .ai-close-button { flex-basis: 36px !important; width: 36px !important; min-width: 36px !important; height: 36px !important; min-height: 36px !important; }
+  .ai-overlay .offline-help-header { padding: 10px !important; gap: 7px !important; }
+  .ai-overlay .offline-help-back { min-height: 36px !important; padding: 7px 10px !important; font-size: 10px; }
+  .ai-overlay .offline-help-close,
+  .ai-overlay .fixing-tools-close { flex-basis: 36px !important; width: 36px !important; min-width: 36px !important; height: 36px !important; min-height: 36px !important; }
+  .ai-overlay .bot-nav button { font-size: 9px !important; padding: 7px 5px !important; }
+}
