@@ -2051,6 +2051,94 @@ CREATE POLICY "Users can insert own templates" ON templates FOR INSERT WITH CHEC
     throw error;
   }
 }` },
+  { name: 'index.html — minimal page', desc: 'Small, clean HTML entry file with viewport metadata and separate CSS/JavaScript files.', code: `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000">
+  <title>My Project</title>
+  <link rel="stylesheet" href="./index.css">
+</head>
+<body>
+  <main class="container">
+    <h1>Hello, world!</h1>
+    <p>Start building here.</p>
+    <button id="hello-button" type="button">Click me</button>
+  </main>
+  <script src="./script.js" defer></script>
+</body>
+</html>` },
+  { name: 'index.css — clean starter', desc: 'A practical CSS reset and responsive page foundation. A quick starting point when you do not want to write boilerplate.', code: `/* Minimal responsive starter — edit the design tokens first. */
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  --page-bg: #000000;
+  --surface: #111111;
+  --text: #f5f5f5;
+  --muted: #a3a3a3;
+  --border: #2b2b2b;
+  --accent: #f5f5f5;
+  --radius: 12px;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { min-width: 320px; min-height: 100%; scroll-behavior: smooth; }
+body { min-height: 100vh; margin: 0; background: var(--page-bg); color: var(--text); font: 400 16px/1.6 system-ui, sans-serif; }
+img, picture, video, canvas, svg { display: block; max-width: 100%; }
+input, button, textarea, select { font: inherit; }
+button, [role="button"] { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+a { color: inherit; text-underline-offset: .2em; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.container { width: min(100% - 2rem, 70rem); margin-inline: auto; padding-block: clamp(2rem, 6vw, 5rem); }
+.surface { padding: 1.25rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+h1, h2, h3 { line-height: 1.15; text-wrap: balance; }
+p { color: var(--muted); }
+button, .button { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; min-height: 42px; padding: .65rem 1rem; border: 1px solid var(--border); border-radius: 9px; background: var(--text); color: var(--page-bg); text-decoration: none; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }` },
+  { name: 'script.js — DOM starter', desc: 'Tiny no-framework JavaScript entry point with a click handler and safe text update.', code: `const button = document.querySelector('#hello-button');
+
+button?.addEventListener('click', () => {
+  const message = document.querySelector('#message');
+  if (message) {
+    message.textContent = 'It works!';
+  } else {
+    const note = document.createElement('p');
+    note.id = 'message';
+    note.textContent = 'It works!';
+    document.querySelector('main')?.append(note);
+  }
+});` },
+  { name: 'style.css — basic starter', desc: 'Simple light theme stylesheet for a basic HTML project.', code: `:root { font-family: system-ui, sans-serif; color: #202124; background: #f7f7f8; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; }
+main { width: min(100% - 2rem, 48rem); margin: 0 auto; padding: 3rem 0; }
+button { border: 0; border-radius: .5rem; padding: .75rem 1rem; background: #202124; color: white; font: inherit; cursor: pointer; }
+button:hover { opacity: .85; }
+button:focus-visible { outline: 3px solid #777; outline-offset: 3px; }` },
+  { name: 'React App.jsx — minimal component', desc: 'Small React component with state and an event handler, without extra libraries.', code: `import { useState } from 'react';
+
+export default function App() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <main className="container">
+      <h1>My React App</h1>
+      <p>Button clicked {count} times.</p>
+      <button type="button" onClick={() => setCount(value => value + 1)}>
+        Click me
+      </button>
+    </main>
+  );
+}` },
+  { name: 'CSS centered card', desc: 'Reusable responsive centered-card layout for quick prototypes.', code: `* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 1rem; font: 16px/1.5 system-ui, sans-serif; background: #080808; color: #f5f5f5; }
+.card { width: min(100%, 28rem); padding: 1.5rem; border: 1px solid #303030; border-radius: 1rem; background: #111; box-shadow: 0 1rem 3rem #0008; }
+.card p { color: #aaa; }
+.card button { padding: .7rem 1rem; border: 1px solid #555; border-radius: .6rem; background: #eee; color: #111; }` },
   { name: 'React loading and error states', desc: 'A small React pattern for loading data and rendering loading, error, and success states.', code: `import { useEffect, useState } from 'react';
 
 export function DataPanel({ url }) {
@@ -2068,4 +2156,322 @@ export function DataPanel({ url }) {
   if (state.error) return <p role="alert">Could not load data: {state.error}</p>;
   return <pre>{JSON.stringify(state.data, null, 2)}</pre>;
 }` }
+
+  ,{ name: 'main.jsx — React entry point', desc: 'Standard React entry file that mounts App into #root and imports the global stylesheet.', code: `import React from 'react';
+import { createRoot } from 'react-dom/client';
+import App from './App.jsx';
+import './index.css';
+
+const rootElement = document.getElementById('root');
+if (!rootElement) throw new Error('Missing #root element in index.html');
+
+createRoot(rootElement).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>,
+);` }
+  ,{ name: 'index.css — modern light starter', desc: 'Light-theme counterpart with reset, design tokens, readable typography, responsive container, and accessible focus styles.', code: `:root {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #171717;
+  background: #f7f7f7;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --bg: #f7f7f7;
+  --surface: #ffffff;
+  --text: #171717;
+  --muted: #666666;
+  --border: #dedede;
+  --accent: #171717;
+  --radius: 12px;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { min-width: 320px; min-height: 100%; scroll-behavior: smooth; }
+body { min-height: 100vh; margin: 0; background: var(--bg); color: var(--text); font-family: inherit; font-size: 16px; line-height: 1.6; }
+img, video, canvas, svg { max-width: 100%; }
+button, input, textarea, select { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .55; }
+a { color: inherit; text-underline-offset: .2em; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.container { width: min(100% - 2rem, 72rem); margin-inline: auto; padding-block: clamp(2rem, 6vw, 5rem); }
+.surface { padding: 1.25rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+h1, h2, h3 { line-height: 1.15; }
+p { color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; transition-duration: .01ms !important; } }` }
+  ,{ name: 'CSS Flexbox layout', desc: 'Reusable responsive row that wraps on smaller screens and keeps spacing consistent.', code: `.flex-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.flex-row > * { min-width: 0; }
+.flex-row .grow { flex: 1 1 16rem; }
+.flex-row .no-shrink { flex-shrink: 0; }
+@media (max-width: 600px) {
+  .flex-row.stack-on-mobile { align-items: stretch; flex-direction: column; }
+}` }
+  ,{ name: 'CSS Grid responsive cards', desc: 'Responsive auto-fit card grid without media-query boilerplate.', code: `.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: 1rem;
+  align-items: stretch;
+}
+.card {
+  min-width: 0;
+  padding: 1.25rem;
+  border: 1px solid var(--border, #303030);
+  border-radius: var(--radius, 12px);
+  background: var(--surface, #111);
+}
+.card h2 { margin-top: 0; }
+.card p { line-height: 1.6; }` }
+  ,{ name: 'JavaScript form validation', desc: 'Small client-side validation pattern with accessible status messaging; connect a backend to submit real data.', code: `const form = document.querySelector('#contact-form');
+const status = document.querySelector('#form-status');
+
+form?.addEventListener('submit', (event) => {
+  event.preventDefault();
+  if (!form.reportValidity()) return;
+  if (status) status.textContent = 'Form looks good. Connect your backend to submit it.';
+});` }
+  ,{ name: 'JavaScript debounce utility', desc: 'Delay frequent callbacks such as search input until typing pauses.', code: `export function debounce(callback, delay = 250) {
+  let timerId;
+  return (...args) => {
+    clearTimeout(timerId);
+    timerId = setTimeout(() => callback(...args), delay);
+  };
+}
+
+// Example:
+// const searchLater = debounce((value) => runSearch(value), 300);
+// input.addEventListener('input', (event) => searchLater(event.target.value));` }
+  ,{ name: 'React reusable button', desc: 'Small reusable button component with variant, disabled, and native button type support.', code: `export function Button({ children, variant = 'primary', type = 'button', disabled = false, onClick }) {
+  return (
+    <button
+      className={\`button button--\${variant}\`}
+      type={type}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}` }
+  ,{ name: 'CSS modal dialog', desc: 'A simple native dialog style with backdrop, scrolling, and a small-screen layout.', code: `dialog {
+  width: min(92vw, 36rem);
+  max-height: min(85dvh, 48rem);
+  padding: 1.5rem;
+  overflow: auto;
+  color: #f5f5f5;
+  background: #000;
+  border: 1px solid #303030;
+  border-radius: 1rem;
+  box-shadow: 0 1.5rem 5rem #0009;
+}
+dialog::backdrop { background: rgb(0 0 0 / 70%); backdrop-filter: blur(4px); }
+dialog form { display: grid; gap: 1rem; }
+@media (max-width: 480px) { dialog { padding: 1rem; border-radius: .75rem; } }` }
+  ,{ name: 'HTML app shell', desc: 'Semantic accessible HTML skeleton with navigation, main content, footer, and responsive metadata.', code: `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000">
+  <title>My App</title>
+  <link rel="stylesheet" href="./index.css">
+  <script src="./index.js" defer></script>
+</head>
+<body>
+  <header class="container"><nav aria-label="Main navigation"><a href="/" aria-label="Home">My App</a></nav></header>
+  <main class="container" id="main-content"><h1>Welcome</h1><p>Replace this with your content.</p></main>
+  <footer class="container"><small>&copy; <span id="year"></span> My App</small></footer>
+</body>
+</html>` }
+
+  ,{ name: 'Python — script starter', desc: 'Clean Python entry point with a main function, type hints, and a safe execution guard.', code: `"""Small Python application starter."""
+from __future__ import annotations
+
+
+def main() -> None:
+    message = "Hello, world!"
+    print(message)
+
+
+if __name__ == "__main__":
+    main()` }
+  ,{ name: 'Python — file read with errors', desc: 'Read a UTF-8 text file and handle common filesystem errors.', code: `from pathlib import Path
+
+
+def read_text(path: str) -> str | None:
+    try:
+        return Path(path).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        print(f"File not found: {path}")
+    except OSError as error:
+        print(f"Could not read file: {error}")
+    return None` }
+  ,{ name: 'Java — class starter', desc: 'Minimal Java class with a main method and formatted output.', code: `public class Main {
+    public static void main(String[] args) {
+        String message = "Hello, world!";
+        System.out.println(message);
+    }
+}` }
+  ,{ name: 'C++ — main starter', desc: 'Modern C++ entry point with standard input/output and a return code.', code: `#include <iostream>
+#include <string>
+
+int main() {
+    const std::string message = "Hello, world!";
+    std::cout << message << '\\n';
+    return 0;
+}` }
+  ,{ name: 'C — main starter', desc: 'Small C program with standard output and a conventional return value.', code: `#include <stdio.h>
+
+int main(void) {
+    puts("Hello, world!");
+    return 0;
+}` }
+  ,{ name: 'C# — Program.cs starter', desc: 'Modern C# top-level entry point without extra project dependencies.', code: `using System;
+
+string message = "Hello, world!";
+Console.WriteLine(message);` }
+  ,{ name: 'Go — main.go starter', desc: 'Minimal Go application with a package entry point.', code: `package main
+
+import "fmt"
+
+func main() {
+    fmt.Println("Hello, world!")
+}` }
+  ,{ name: 'Rust — main.rs starter', desc: 'Minimal Rust entry point with a simple function.', code: `fn main() {
+    let message = "Hello, world!";
+    println!("{message}");
+}` }
+  ,{ name: 'PHP — index.php starter', desc: 'Basic PHP entry file with strict typing enabled.', code: `<?php
+declare(strict_types=1);
+
+$message = 'Hello, world!';
+echo htmlspecialchars($message, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+` }
+  ,{ name: 'Ruby — script starter', desc: 'Small Ruby script with a reusable main method.', code: `def main
+  message = "Hello, world!"
+  puts message
+end
+
+main if $PROGRAM_NAME == __FILE__` }
+  ,{ name: 'Swift — main starter', desc: 'Simple Swift entry file with a function and string interpolation.', code: `import Foundation
+
+func main() {
+    let message = "Hello, world!"
+    print(message)
+}
+
+main()` }
+  ,{ name: 'Kotlin — main.kt starter', desc: 'Concise Kotlin program with a main entry point.', code: `fun main() {
+    val message = "Hello, world!"
+    println(message)
+}` }
+  ,{ name: 'Dart — main.dart starter', desc: 'Dart entry point with a typed variable and output.', code: `void main() {
+  const String message = 'Hello, world!';
+  print(message);
+}` }
+  ,{ name: 'TypeScript — typed function', desc: 'A typed function with an explicit input and return type.', code: `type GreetingOptions = {
+  name: string;
+  punctuation?: string;
+};
+
+export function greet({ name, punctuation = '!' }: GreetingOptions): string {
+  return \`Hello, \${name}\${punctuation}\`;
+}
+
+console.log(greet({ name: 'world' }));` }
+  ,{ name: 'SQL — create table and query', desc: 'Portable SQL starter showing a table definition, insert, and ordered select.', code: `CREATE TABLE IF NOT EXISTS tasks (
+  id INTEGER PRIMARY KEY,
+  title VARCHAR(200) NOT NULL,
+  completed BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+INSERT INTO tasks (id, title, completed)
+VALUES (1, 'First task', FALSE);
+
+SELECT id, title, completed
+FROM tasks
+ORDER BY id;` }
+  ,{ name: 'Bash — safe script starter', desc: 'Shell script with strict mode, a reusable function, and quoted variables.', code: `#!/usr/bin/env bash
+set -Eeuo pipefail
+
+main() {
+  local message="Hello, world!"
+  printf '%s\\n' "$message"
+}
+
+main "$@"` }
+  ,{ name: 'PowerShell — script starter', desc: 'A small PowerShell script with a parameter and clear output.', code: `param(
+    [string]$Name = "world"
+)
+
+$message = "Hello, $Name!"
+Write-Output $message` }
+  ,{ name: 'Lua — script starter', desc: 'Small Lua script with a function and local variables.', code: `local function greet(name)
+  return "Hello, " .. name .. "!"
+end
+
+print(greet("world"))` }
+  ,{ name: 'R — data starter', desc: 'Minimal R script that creates a data frame and prints a summary.', code: `people <- data.frame(
+  name = c("Ada", "Grace"),
+  score = c(95, 98)
+)
+
+print(people)
+summary(people$score)` }
+  ,{ name: 'Vue — single-file component', desc: 'Vue 3 component with a setup script, reactive state, and scoped styles.', code: `<script setup>
+import { ref } from 'vue'
+
+const count = ref(0)
+</script>
+
+<template>
+  <section class="counter">
+    <h1>Count: {{ count }}</h1>
+    <button type="button" @click="count++">Add one</button>
+  </section>
+</template>
+
+<style scoped>
+.counter { display: grid; gap: 1rem; justify-items: start; }
+button { padding: .6rem 1rem; border-radius: .75rem; cursor: pointer; }
+</style>` }
+  ,{ name: 'Svelte — component starter', desc: 'Small Svelte component with local state and an event handler.', code: `<script>
+  let count = 0;
+</script>
+
+<svelte:head>
+  <title>Counter</title>
+</svelte:head>
+
+<main>
+  <h1>Count: {count}</h1>
+  <button onclick={() => count += 1}>Add one</button>
+</main>
+
+<style>
+  main { display: grid; gap: 1rem; justify-items: start; }
+  button { padding: .6rem 1rem; border-radius: .75rem; }
+</style>` }
+  ,{ name: 'Elixir — module starter', desc: 'A basic Elixir module with a public function and invocation.', code: `defmodule Hello do
+  def greet(name) do
+    "Hello, #{name}!"
+  end
+end
+
+IO.puts(Hello.greet("world"))` }
+  ,{ name: 'Scala — main starter', desc: 'Scala 3 entry point with a typed value.', code: `@main def main(): Unit =
+  val message: String = "Hello, world!"
+  println(message)` }
+  ,{ name: 'Dockerfile — lightweight Node app', desc: 'Multi-stage-friendly baseline for a Node app; adapt the start command to your project.', code: `FROM node:22-alpine
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev
+COPY . .
+ENV NODE_ENV=production
+EXPOSE 3000
+CMD ["npm", "start"]` }
+
 ]

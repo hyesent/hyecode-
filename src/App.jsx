@@ -24,6 +24,81 @@ const languageForFile = (name = '') => {
   const map = {'.js':'javascript','.jsx':'javascript','.mjs':'javascript','.cjs':'javascript','.ts':'typescript','.tsx':'typescript','.mts':'typescript','.cts':'typescript','.html':'html','.htm':'html','.css':'css','.scss':'scss','.sass':'scss','.less':'less','.json':'json','.jsonc':'json','.md':'markdown','.mdx':'markdown','.xml':'xml','.svg':'xml','.yaml':'yaml','.yml':'yaml','.toml':'ini','.py':'python','.pyw':'python','.java':'java','.kt':'kotlin','.kts':'kotlin','.c':'c','.h':'c','.cc':'cpp','.cpp':'cpp','.cxx':'cpp','.hpp':'cpp','.cs':'csharp','.go':'go','.rs':'rust','.php':'php','.rb':'ruby','.swift':'swift','.dart':'dart','.sql':'sql','.sh':'shell','.bash':'shell','.zsh':'shell','.ps1':'powershell','.bat':'bat','.cmd':'bat','.lua':'lua','.r':'r','.ex':'elixir','.exs':'elixir','.erl':'erlang','.clj':'clojure','.scala':'scala','.groovy':'groovy','.gradle':'groovy','.vue':'html','.svelte':'html','.astro':'html','.graphql':'graphql','.gql':'graphql','.proto':'protobuf','.tf':'hcl','.hcl':'hcl','.sol':'sol','.dockerfile':'dockerfile','.makefile':'makefile','.mk':'makefile','.dockerfile':'dockerfile'}
   return map[ext] || (lower === 'dockerfile' ? 'dockerfile' : lower === 'makefile' ? 'makefile' : 'plaintext')
 }
+// Conservative delimiter repair: only adds closing brackets when every closer seen so far
+// is correctly paired. It deliberately refuses ambiguous/mismatched code instead of guessing.
+const repairMissingDelimiters = (source = '', language = 'plaintext') => {
+  const stack = []
+  const pairs = { ')': '(', ']': '[', '}': '{' }
+  const openers = new Set(['(', '[', '{'])
+  let quote = ''
+  let tripleQuote = false
+  let escaped = false
+  let lineComment = false
+  let blockComment = false
+  let htmlComment = false
+  let regexLiteral = false
+  let regexClass = false
+  let lastSignificant = ''
+  const jsLike = /javascript|typescript|json|css|scss|less|java|kotlin|csharp|cpp|c\b|go|rust|php|swift|dart|sol|groovy|graphql/.test(language)
+  const markupLike = /^(html|xml|svg|vue|svelte|astro)$/.test(language)
+  const supportsSlashComments = !markupLike
+  const supportsHashComments = /^(python|shell|ruby|r|powershell|yaml|dockerfile|makefile|ini)$/.test(language)
+  for (let i = 0; i < source.length; i++) {
+    const ch = source[i], next = source[i + 1]
+    if (htmlComment) { if (source.startsWith('-->', i)) { htmlComment = false; i += 2 } continue }
+    if (lineComment) { if (ch === '\n') lineComment = false; continue }
+    if (blockComment) { if (ch === '*' && next === '/') { blockComment = false; i++ } continue }
+    if (markupLike && source.startsWith('<!--', i)) { htmlComment = true; i += 3; continue }
+    if (quote) {
+      if (escaped) { escaped = false; continue }
+      if (ch === '\\') { escaped = true; continue }
+      if (tripleQuote && source.startsWith(quote.repeat(3), i)) { quote = ''; tripleQuote = false; i += 2; lastSignificant = 'v'; continue }
+      if (!tripleQuote && ch === quote) { quote = ''; lastSignificant = 'v' }
+      continue
+    }
+    if (regexLiteral) {
+      if (escaped) { escaped = false; continue }
+      if (ch === '\\') { escaped = true; continue }
+      if (ch === '[') regexClass = true
+      else if (ch === ']') regexClass = false
+      else if (ch === '/' && !regexClass) { regexLiteral = false; lastSignificant = 'v' }
+      else if (ch === '\n') return { ok: false, reason: 'A regular-expression literal appears to be unfinished; no automatic change was made.' }
+      continue
+    }
+    if (supportsSlashComments && ch === '/' && next === '/') { lineComment = true; i++; continue }
+    if (supportsSlashComments && ch === '/' && next === '*') { blockComment = true; i++; continue }
+    if (supportsHashComments && ch === '#') { lineComment = true; continue }
+    if (ch === '"' || ch === "'" || (ch === '`' && /javascript|typescript/.test(language))) {
+      quote = ch
+      if (/^python$/.test(language) && (ch === '"' || ch === "'") && source.startsWith(ch.repeat(3), i)) { tripleQuote = true; i += 2 }
+      continue
+    }
+    // Avoid treating common JavaScript regular expressions as code delimiters.
+    if (jsLike && ch === '/' && /^(?:|[=(:,!&|?{};\[]|return|case|throw)$/.test(lastSignificant)) { regexLiteral = true; regexClass = false; continue }
+    if (openers.has(ch)) stack.push({ ch, index: i })
+    else if (Object.prototype.hasOwnProperty.call(pairs, ch)) {
+      const top = stack[stack.length - 1]
+      if (!top || top.ch !== pairs[ch]) return { ok: false, reason: `Found a mismatched “${ch}” near character ${i + 1}; automatic bracket repair was skipped to avoid changing the code incorrectly.` }
+      stack.pop()
+    }
+    if (!/\s/.test(ch)) lastSignificant = /[A-Za-z_$]/.test(ch) ? 'v' : ch
+  }
+  if (quote || blockComment || htmlComment || regexLiteral) return { ok: false, reason: 'A string, comment, or regular expression appears unfinished; no automatic change was made.' }
+  if (!stack.length) return { ok: true, code: source, added: '' }
+  // Parentheses/brackets that remain open across statement boundaries are too ambiguous
+  // to close automatically (e.g. `if (ready {` or `call(value;`).
+  const unmatchedParen = stack.find(item => item.ch === '(')
+  if (unmatchedParen) {
+    const tail = source.slice(unmatchedParen.index + 1)
+    const hasLaterBrace = stack.some(item => item.ch === '{' && item.index > unmatchedParen.index)
+    if (tail.includes(';') || hasLaterBrace) return { ok: false, reason: 'An opening parenthesis crosses a statement or block boundary; automatic repair was skipped because the correct closing position is ambiguous.' }
+  }
+  const closers = stack.slice().reverse().map(item => ({ '(': ')', '[': ']', '{': '}' })[item.ch]).join('')
+  // Put the missing closers on a new line when the file already has content.
+  const separator = source.length && !source.endsWith('\n') ? '\n' : ''
+  return { ok: true, code: `${source}${separator}${closers}\n`, added: closers }
+}
+
 const GitHubMark = ({ size = 16, style = {}, ...props }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ display: 'inline-block', flexShrink: 0, verticalAlign: 'middle', ...style }} {...props}>
     <path d="M12 .9a11.1 11.1 0 0 0-3.51 21.63c.55.1.76-.24.76-.54v-2.08c-3.1.67-3.76-1.32-3.76-1.32-.5-1.29-1.23-1.63-1.23-1.63-1.01-.69.08-.68.08-.68 1.12.08 1.71 1.15 1.71 1.15.99 1.7 2.6 1.21 3.23.92.1-.72.39-1.21.7-1.49-2.48-.28-5.09-1.24-5.09-5.52 0-1.22.44-2.21 1.15-2.99-.12-.28-.5-1.42.11-2.95 0 0 .94-.3 3.05 1.14a10.6 10.6 0 0 1 5.55 0c2.11-1.44 3.05-1.14 3.05-1.14.61 1.53.23 2.67.11 2.95.72.78 1.15 1.77 1.15 2.99 0 4.29-2.61 5.24-5.1 5.51.4.35.75 1.03.75 2.08v3.06c0 .3.2.65.77.54A11.1 11.1 0 0 0 12 .9Z" />
@@ -870,13 +945,35 @@ If code is requested, provide a complete practical solution and explain importan
     }, 120)
   }
 
-  const applyOfflineFixes = () => {
-    if (!activeFile) { setStatus('Open a file before running offline fixes'); return }
-    const original = activeFile.content || ''
-    const fixed = original.split('\n').map(line => line.replace(/[\t ]+$/g, '')).join('\n').replace(/\n{3,}/g, '\n\n')
-    setFiles(previous => previous.map(file => file.id === activeFile.id ? { ...file, content: fixed, dirty: fixed !== original || file.dirty } : file))
-    setStatus(fixed === original ? 'No safe whitespace fixes were needed.' : 'Applied safe offline fixes.')
-      }
+  const applyOfflineFixes = (mode = 'offline') => {
+    if (!activeFile) { setStatus('Open a file before running fixes'); return }
+    const editor = editorRef.current
+    const original = editor?.getValue?.() ?? activeFile.content ?? ''
+    const label = mode === 'local' ? 'Quick Fix' : 'Offline Syntax Fix'
+
+    // Quick Fix is intentionally cosmetic only; syntax repair is a separate tool.
+    if (mode === 'local') {
+      const cleaned = original.split('\n').map(line => line.replace(/[\t ]+$/g, '')).join('\n').replace(/\n{3,}/g, '\n\n')
+      if (cleaned !== original) {
+        setFiles(previous => previous.map(file => file.id === activeFile.id ? { ...file, content: cleaned, dirty: true } : file))
+        setStatus('Quick Fix applied: removed trailing spaces and repeated blank lines. Review before saving.')
+      } else setStatus('Quick Fix: no extra trailing spaces or repeated blank lines found.')
+      return
+    }
+
+    const language = languageForFile(activeFile.name)
+    const delimiterResult = repairMissingDelimiters(original, language)
+    if (!delimiterResult.ok) {
+      setStatus(`${label}: ${delimiterResult.reason}`)
+      return
+    }
+    if (delimiterResult.code !== original) {
+      setFiles(previous => previous.map(file => file.id === activeFile.id ? { ...file, content: delimiterResult.code, dirty: true } : file))
+      setStatus(`${label} added missing closing delimiter${delimiterResult.added.length === 1 ? '' : 's'}: ${delimiterResult.added.split('').join(' ')}. Check the insertion point before saving.`)
+    } else {
+      setStatus(`${label}: no safe missing closing brackets were found. Mismatched or ambiguous syntax is left unchanged.`)
+    }
+  }
   const runPaletteCommand = (command) => {
     setActiveOverlay(null)
     if (command.id === 'save') saveDirtyFiles()
@@ -1137,7 +1234,12 @@ If code is requested, provide a complete practical solution and explain importan
 
       {activeOverlay === 'tree' && <div className="overlay side-drawer" onClick={() => setActiveOverlay(null)}><div className="side-drawer-content" onClick={event => event.stopPropagation()} style={{ display: 'flex', flexDirection: 'column' }}><div style={{ padding: 12, borderBottom: '1px solid #333', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}><span style={{ fontSize: 12, fontWeight: 'bold' }}>EXPLORER</span><div style={{ display: 'flex', gap: 8 }}><button title="New file" style={iconButtonStyle} onClick={() => { setNewItemType('file'); setNewItemName(''); setActiveOverlay('newItem') }}><Plus size={15} /></button><button title="New folder" style={iconButtonStyle} onClick={() => { setNewItemType('folder'); setNewItemName(''); setActiveOverlay('newItem') }}><FolderPlus size={15} /></button><button title="Import" style={iconButtonStyle} onClick={importFiles}><Upload size={15} /></button><X size={16} onClick={() => setActiveOverlay(null)} /></div></div><div style={{ padding: '8px 10px', borderBottom: '1px solid #222' }}><input value={treeSearch} onChange={event => setTreeSearch(event.target.value)} placeholder="Filter files and folders…" style={{ width: '100%', boxSizing: 'border-box' }} /></div><div style={{ flex: 1, overflowY: 'auto', padding: '5px 0' }}>{renderFileTree()}</div><div style={{ padding: 10, borderTop: '1px solid #292d33', fontSize: 10, color: '#737984', overflowWrap: 'anywhere' }}>{workspacePath}</div></div></div>}
 
-            {activeOverlay === 'tools' && <div className="overlay center-modal" onClick={() => setActiveOverlay(null)}><div className="modal-content" onClick={event => event.stopPropagation()}><div className="modal-header"><h3>Fixing Tools</h3><X size={18} onClick={() => setActiveOverlay(null)} /></div><div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}><div className="pill" onClick={() => { applyOfflineFixes(); setActiveOverlay(null) }}><CheckCircle2 size={14} /> Local Fix</div><div className="pill" onClick={() => { applyOfflineFixes(); setActiveOverlay(null) }}><CheckCircle2 size={14} /> Offline Fix</div><div className="pill" onClick={() => { formatActiveFile(); setActiveOverlay(null) }}><Wand2 size={14} /> Format Document</div><div className="pill" onClick={() => { setActiveOverlay('problems') }}><ProblemsNavIcon size={14} /> Inspect Problems</div></div></div></div>}
+            {activeOverlay === 'tools' && <div className="overlay center-modal" onClick={() => setActiveOverlay(null)}><div className="modal-content fixing-tools-modal" onClick={event => event.stopPropagation()}><div className="modal-header"><h3>Fixing Tools</h3><button className="icon-button" aria-label="Close fixing tools" onClick={() => setActiveOverlay(null)}><X size={18} /></button></div><div className="fixing-tools-list">
+              <button className="fix-tool-option" onClick={() => { applyOfflineFixes('local'); setActiveOverlay(null) }}><span className="fix-tool-icon"><CheckCircle2 size={17} /></span><span className="fix-tool-copy"><strong>Quick Fix</strong><small>Clean trailing spaces and repeated blank lines. Does not change code logic or repair syntax.</small></span><ChevronRight size={16} /></button>
+              <button className="fix-tool-option" onClick={() => { applyOfflineFixes('offline'); setActiveOverlay(null) }}><span className="fix-tool-icon"><Wand2 size={17} /></span><span className="fix-tool-copy"><strong>Offline Syntax Fix</strong><small>Try to close clearly unmatched brackets without internet or an API key. Ambiguous code is left untouched.</small></span><ChevronRight size={16} /></button>
+              <button className="fix-tool-option" onClick={() => { formatActiveFile(); setActiveOverlay(null) }}><span className="fix-tool-icon"><Wand2 size={17} /></span><span className="fix-tool-copy"><strong>Format Document</strong><small>Reformat the current file using the editor's formatter when available.</small></span><ChevronRight size={16} /></button>
+              <button className="fix-tool-option" onClick={() => { setActiveOverlay('problems') }}><span className="fix-tool-icon"><ProblemsNavIcon size={17} /></span><span className="fix-tool-copy"><strong>Inspect Problems</strong><small>Review reported errors and warnings without changing your code.</small></span><ChevronRight size={16} /></button>
+            </div></div></div>}
 
       {/* FIXED: FILE OPS - Added New Project and Close Project */}
       {activeOverlay === 'file' && <div className="overlay center-modal" onClick={() => setActiveOverlay(null)}><div className="modal-content" onClick={event => event.stopPropagation()}><div className="modal-header"><h3>File Operations</h3><X size={18} onClick={() => setActiveOverlay(null)} /></div><div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>

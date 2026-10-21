@@ -842,3 +842,161 @@ body {
 .ai-overlay .pill { background: #0b0b0b; color: #ddd; border-color: #303030; }
 .ai-overlay .pill:hover:not(:disabled) { background: #191919; border-color: #555; }
 @media (max-width: 480px) { .ai-chat-screen .modal-header { gap: 6px; padding: 8px; } .ai-chat-screen .ai-subtitle { max-width: 140px; } .ai-header-actions { gap: 3px; } .ai-header-actions .pill { padding: 6px 7px; font-size: 10px; } .ai-header-actions .icon-button { padding: 6px; } }
+
+/* AI modal controls: consistent, visible, touch-friendly black-glass buttons */
+.ai-overlay .icon-button,
+.ai-overlay button.icon-button,
+.ai-overlay .ai-header-actions .icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0;
+  border: 1px solid #383838 !important;
+  border-radius: 10px !important;
+  background: linear-gradient(145deg, rgba(255,255,255,.075), rgba(255,255,255,.018)) !important;
+  color: #f4f4f4 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.045), 0 4px 14px rgba(0,0,0,.22);
+  cursor: pointer;
+  transition: background .16s ease, border-color .16s ease, transform .16s ease;
+}
+.ai-overlay .icon-button:hover,
+.ai-overlay button.icon-button:hover {
+  background: #1b1b1b !important;
+  border-color: #686868 !important;
+}
+.ai-overlay .icon-button:active,
+.ai-overlay button.icon-button:active { transform: scale(.96); }
+.ai-overlay .icon-button:focus-visible,
+.ai-overlay button.icon-button:focus-visible,
+.ai-overlay .ai-back-button:focus-visible {
+  outline: 2px solid #a0a0a0;
+  outline-offset: 2px;
+}
+.ai-overlay .modal-header > .icon-button { margin-left: auto; }
+.ai-overlay .ai-header-actions .icon-button { width: 36px; min-width: 36px; height: 36px; min-height: 36px; }
+.ai-overlay .ai-back-button {
+  min-height: 36px;
+  border-color: #383838;
+  background: #101010;
+  color: #f0f0f0;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+}
+.ai-overlay .ai-back-button:hover { background: #1b1b1b; border-color: #666; }
+.ai-overlay .ai-entry-card .modal-header .icon-button { margin-left: auto; }
+.ai-overlay .ai-entry-card .modal-header { padding: 14px 14px 12px; }
+.ai-overlay .ai-entry-card .ai-entry-options > button:focus-visible { outline: 2px solid #777; outline-offset: 2px; }
+.ai-overlay .ai-header-actions .pill { white-space: nowrap; }
+.ai-overlay .ai-chat-screen .modal-header > div:nth-child(2) { flex: 1; min-width: 0; }
+.ai-overlay .ai-chat-screen .modal-header h3 { overflow-wrap: anywhere; }
+@media (max-width: 360px) {
+  .ai-overlay .icon-button,
+  .ai-overlay button.icon-button { width: 34px; min-width: 34px; height: 34px; min-height: 34px; border-radius: 9px !important; }
+  .ai-overlay .ai-header-actions { gap: 3px; }
+  .ai-overlay .ai-header-actions .pill { min-height: 34px; padding: 5px 6px; }
+}
+
+/* Keep AI close/settings controls visibly styled even inside compact headers. */
+.ai-overlay .ai-header-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+.ai-overlay .modal-header > .icon-button,
+.ai-overlay .ai-header-actions > .icon-button {
+  appearance: none;
+  -webkit-appearance: none;
+  color: #f5f5f5 !important;
+  background: #111 !important;
+  border: 1px solid #454545 !important;
+  border-radius: 10px !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 3px 10px rgba(0,0,0,.35);
+}
+.ai-overlay .modal-header > .icon-button svg,
+.ai-overlay .ai-header-actions > .icon-button svg {
+  display: block;
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.2;
+}
+.ai-overlay .modal-header > .icon-button:hover,
+.ai-overlay .ai-header-actions > .icon-button:hover {
+  background: #202020 !important;
+  border-color: #777 !important;
+}
+.ai-overlay .modal-header > .icon-button:active,
+.ai-overlay .ai-header-actions > .icon-button:active {
+  background: #292929 !important;
+  transform: scale(.95);
+}
+.ai-overlay .modal-header > .icon-button:focus-visible,
+.ai-overlay .ai-header-actions > .icon-button:focus-visible {
+  outline: 2px solid #bdbdbd;
+  outline-offset: 2px;
+}
+
+/* Rounded, touch-friendly cards across the app (keep the pure-black theme). */
+.modal-content {
+  border-radius: 16px;
+  overflow: hidden;
+}
+.side-drawer-content { border-radius: 0 16px 16px 0; }
+.tree-item, .tree-folder, .recent-pill, .history-item {
+  border-radius: 11px;
+}
+.tree-item { margin: 2px 6px; }
+.recent-pill { border: 1px solid #282828; }
+.modal-content input, .modal-content textarea, .modal-content select,
+input, textarea, select {
+  border-radius: 10px;
+}
+.fixing-tools-modal { width: min(94vw, 460px); max-height: 86dvh; }
+.fixing-tools-modal .modal-header { padding: 14px 16px; border-bottom: 1px solid #262626; }
+.fixing-tools-modal .modal-header h3 { color: #f4f4f4; font-size: 14px; }
+.fixing-tools-list { display: grid; gap: 9px; padding: 12px; overflow-y: auto; }
+.fix-tool-option {
+  appearance: none;
+  -webkit-appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  min-width: 0;
+  padding: 12px;
+  text-align: left;
+  color: #e9e9e9;
+  background: linear-gradient(145deg, rgba(255,255,255,.055), rgba(255,255,255,.018));
+  border: 1px solid #2c2c2c;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: background .16s ease, border-color .16s ease, transform .16s ease;
+}
+.fix-tool-option:hover { background: #151515; border-color: #505050; }
+.fix-tool-option:active { transform: scale(.99); background: #1b1b1b; }
+.fix-tool-option:focus-visible { outline: 2px solid #aaa; outline-offset: 2px; }
+.fix-tool-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #333;
+  border-radius: 12px;
+  color: #ededed;
+  background: #090909;
+}
+.fix-tool-copy { display: grid; gap: 4px; flex: 1; min-width: 0; }
+.fix-tool-copy strong { font-size: 12px; font-weight: 650; }
+.fix-tool-copy small { color: #969696; font-size: 10px; line-height: 1.5; font-weight: 400; }
+.fix-tool-option > svg:last-child { flex: 0 0 auto; color: #777; }
+@media (max-width: 420px) {
+  .fixing-tools-modal { width: calc(100vw - 20px); border-radius: 16px; }
+  .fix-tool-option { padding: 10px; gap: 9px; border-radius: 13px; }
+  .fix-tool-copy small { font-size: 10px; }
+}
