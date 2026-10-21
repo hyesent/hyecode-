@@ -1433,3 +1433,119 @@ input, textarea, select {
   .ai-overlay .fixing-tools-close { flex-basis: 36px !important; width: 36px !important; min-width: 36px !important; height: 36px !important; min-height: 36px !important; }
   .ai-overlay .bot-nav button { font-size: 9px !important; padding: 7px 5px !important; }
 }
+
+/* Screenshot-driven correction: ai-overlay and ai-chat-screen are the SAME element,
+   so selectors must not require .ai-chat-screen to be a descendant of .ai-overlay. */
+.ai-chat-screen {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  padding: 12px !important;
+  overflow-y: auto !important;
+}
+.ai-chat-screen > .modal-content {
+  width: min(100%, 720px) !important;
+  min-width: 0 !important;
+  max-width: 720px !important;
+  max-height: calc(100dvh - 24px) !important;
+  margin: auto !important;
+  box-sizing: border-box !important;
+  flex: 0 1 auto !important;
+  overflow: hidden !important;
+}
+.ai-chat-screen .modal-header.ai-chat-header {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 10px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+.ai-chat-screen .ai-chat-topline {
+  display: grid !important;
+  grid-template-columns: max-content minmax(0, 1fr) 38px !important;
+  align-items: center !important;
+  gap: 9px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+.ai-chat-screen .ai-chat-topline .ai-back-button {
+  display: inline-flex !important;
+  width: max-content !important;
+  max-width: 100% !important;
+  min-width: max-content !important;
+  flex: none !important;
+  white-space: nowrap !important;
+  border-radius: 999px !important;
+}
+.ai-chat-screen .ai-chat-heading {
+  display: block !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  flex: none !important;
+  overflow: hidden !important;
+}
+.ai-chat-screen .ai-chat-heading h3 {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  white-space: nowrap !important;
+  word-break: normal !important;
+  overflow-wrap: normal !important;
+}
+.ai-chat-screen .ai-chat-heading .ai-subtitle {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  white-space: normal !important;
+  word-break: normal !important;
+  overflow-wrap: break-word !important;
+  line-height: 1.4 !important;
+}
+.ai-chat-screen .ai-chat-topline .ai-close-button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 38px !important;
+  min-width: 38px !important;
+  height: 38px !important;
+  min-height: 38px !important;
+  padding: 0 !important;
+  flex: none !important;
+  margin: 0 !important;
+  border: 1px solid #555 !important;
+  border-radius: 50% !important;
+  background: #111 !important;
+  color: #fff !important;
+}
+.ai-chat-screen .ai-chat-actions-row {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 8px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+.ai-chat-screen .ai-chat-actions-row .pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: auto !important;
+  min-width: max-content !important;
+  min-height: 36px !important;
+  padding: 7px 15px !important;
+  border-radius: 999px !important;
+  white-space: nowrap !important;
+}
+@media (max-width: 380px) {
+  .ai-chat-screen { padding: 8px !important; }
+  .ai-chat-screen .ai-chat-topline { grid-template-columns: max-content minmax(0, 1fr) 36px !important; gap: 6px !important; }
+  .ai-chat-screen .ai-chat-topline .ai-back-button { padding: 7px 9px !important; font-size: 10px !important; }
+  .ai-chat-screen .ai-chat-heading h3 { font-size: 12px !important; }
+  .ai-chat-screen .ai-chat-heading .ai-subtitle { font-size: 9px !important; }
+  .ai-chat-screen .ai-chat-topline .ai-close-button { width: 36px !important; min-width: 36px !important; height: 36px !important; min-height: 36px !important; }
+}
