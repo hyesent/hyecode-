@@ -1000,3 +1000,246 @@ input, textarea, select {
   .fix-tool-option { padding: 10px; gap: 9px; border-radius: 13px; }
   .fix-tool-copy small { font-size: 10px; }
 }
+
+/* Final AI polish: pill navigation, spacious two-row headers, and a clearly styled close control. */
+.ai-overlay .bot-nav {
+  border-radius: 999px !important;
+  padding: 5px;
+  gap: 6px;
+  border-color: #292929;
+  background: #050505;
+}
+.ai-overlay .bot-nav button {
+  border-radius: 999px !important;
+  min-height: 38px;
+  padding: 8px 14px;
+}
+.ai-overlay .ai-entry-options > button {
+  border-radius: 20px !important;
+  min-height: 66px;
+  padding: 14px 16px;
+  border-color: #292929;
+  background: linear-gradient(145deg, rgba(255,255,255,.045), rgba(255,255,255,.012));
+}
+.ai-overlay .ai-entry-options > button > svg:first-child { flex-shrink: 0; }
+.ai-overlay .ai-chat-screen .modal-header.ai-chat-header {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px !important;
+  align-items: stretch;
+  padding: 12px 14px 10px;
+}
+.ai-overlay .ai-chat-topline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+}
+.ai-overlay .ai-chat-heading {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.ai-overlay .ai-chat-heading h3 {
+  margin: 0;
+  font-size: 13px;
+  letter-spacing: .08em;
+  line-height: 1.3;
+}
+.ai-overlay .ai-chat-heading .ai-subtitle {
+  max-width: none;
+  overflow-wrap: anywhere;
+  margin-top: 3px;
+  font-size: 10px;
+}
+.ai-overlay .ai-chat-topline .ai-back-button {
+  border-radius: 999px !important;
+  padding: 8px 12px;
+  min-height: 38px;
+}
+.ai-overlay .ai-chat-topline .ai-close-button {
+  margin-left: auto;
+  width: 40px !important;
+  min-width: 40px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  border-radius: 50% !important;
+  background: #101010 !important;
+  border: 1px solid #555 !important;
+  color: #fff !important;
+}
+.ai-overlay .ai-chat-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 2px;
+}
+.ai-overlay .ai-chat-actions-row .pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 7px 15px;
+  border-radius: 999px !important;
+  background: #090909;
+  border: 1px solid #363636;
+  color: #eee;
+  white-space: nowrap;
+}
+.ai-overlay .ai-chat-actions-row .pill:active { background: #202020; }
+.ai-overlay .ai-chat-screen .modal-content > div:nth-child(2) > div:first-child {
+  border-radius: 18px !important;
+}
+.ai-overlay .ai-fix-privacy-note {
+  padding: 0 14px 14px;
+  color: #8b8b8b;
+  font-size: 10px;
+  line-height: 1.55;
+}
+.ai-overlay .ai-fix-choice { border-radius: 24px !important; }
+.ai-overlay .ai-chat-screen .modal-header > .icon-button.ai-close-button svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.5;
+}
+@media (max-width: 380px) {
+  .ai-overlay .ai-chat-screen .modal-header.ai-chat-header { padding: 10px; gap: 8px !important; }
+  .ai-overlay .ai-chat-topline { gap: 7px; }
+  .ai-overlay .ai-chat-topline .ai-back-button { padding: 7px 9px; font-size: 10px; }
+  .ai-overlay .ai-chat-heading h3 { font-size: 12px; }
+  .ai-overlay .ai-chat-heading .ai-subtitle { font-size: 9px; }
+  .ai-overlay .ai-chat-topline .ai-close-button { width: 36px !important; min-width: 36px !important; height: 36px !important; min-height: 36px !important; }
+}
+
+/* Mobile-first AI Fix review and consistent rounded navigation */
+.ai-overlay .ai-entry-card,
+.ai-overlay .ai-fix-review-card {
+  border-radius: 24px !important;
+  overflow: hidden;
+}
+.ai-overlay .ai-entry-card .modal-header .icon-button,
+.ai-overlay .ai-fix-review-card .modal-header .icon-button,
+.ai-overlay .ai-fix-review-card .ai-close-button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 40px !important;
+  width: 40px !important;
+  min-width: 40px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  border: 1px solid #505050 !important;
+  background: #111 !important;
+  color: #f4f4f4 !important;
+  cursor: pointer;
+}
+.ai-overlay .ai-entry-card .modal-header .icon-button svg,
+.ai-overlay .ai-fix-review-card .modal-header .icon-button svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2.5;
+}
+.ai-overlay .ai-entry-card .modal-header .icon-button:disabled { opacity: .45; }
+.ai-overlay .bot-nav {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 7px !important;
+  padding: 10px 12px !important;
+  border-bottom: 1px solid #252525;
+}
+.ai-overlay .bot-nav button {
+  flex: 1 1 auto;
+  border-radius: 999px !important;
+  border: 1px solid #343434 !important;
+  background: #0b0b0b !important;
+  color: #aaa !important;
+  padding: 9px 14px !important;
+  min-height: 36px;
+}
+.ai-overlay .bot-nav button.active {
+  color: #fff !important;
+  background: #202020 !important;
+  border-color: #666 !important;
+}
+.ai-overlay .ai-fix-review-body,
+.ai-overlay .ai-fix-working-body {
+  padding: 14px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: #e8e8e8;
+}
+.ai-overlay .ai-fix-review-notice {
+  padding: 11px 13px;
+  border: 1px solid #343434;
+  border-radius: 16px;
+  color: #bdbdbd;
+  background: rgba(255,255,255,.025);
+  font-size: 11px;
+  line-height: 1.55;
+}
+.ai-overlay .ai-fix-code-label {
+  font-size: 10px;
+  letter-spacing: .08em;
+  color: #8f8f8f;
+}
+.ai-overlay .ai-fix-code-preview {
+  margin: 0;
+  padding: 13px;
+  max-height: min(48dvh, 440px);
+  min-height: 120px;
+  overflow: auto;
+  white-space: pre;
+  overflow-wrap: normal;
+  tab-size: 2;
+  border: 1px solid #292929;
+  border-radius: 16px;
+  background: #050505;
+  color: #dedede;
+  font: 11px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.ai-overlay .ai-fix-working-body p {
+  margin: 0;
+  color: #999;
+  font-size: 12px;
+  line-height: 1.65;
+}
+.ai-overlay .ai-fix-review-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid #242424;
+}
+.ai-overlay .ai-fix-review-actions .pill,
+.ai-overlay .ai-fix-review-actions .btn-main {
+  min-height: 42px;
+  border-radius: 999px !important;
+  padding: 9px 18px;
+}
+.ai-overlay .ai-fix-review-actions .ai-fix-reject { flex: 1; border: 1px solid #454545; background: #0b0b0b; color: #ddd; }
+.ai-overlay .ai-fix-review-actions .ai-fix-accept { flex: 1.5; }
+.ai-overlay .ai-fix-spinner {
+  width: 28px;
+  height: 28px;
+  border: 2px solid #333;
+  border-top-color: #eee;
+  border-radius: 50%;
+  animation: hyecode-ai-fix-spin .8s linear infinite;
+}
+@keyframes hyecode-ai-fix-spin { to { transform: rotate(360deg); } }
+.ai-overlay .ai-entry-options > button,
+.ai-overlay .fix-tool-option,
+.ai-overlay .tree-item { border-radius: 999px !important; }
+.ai-overlay .ai-entry-options > button { min-height: 62px; }
+@media (max-width: 380px) {
+  .ai-overlay .ai-fix-review-card .modal-header .icon-button,
+  .ai-overlay .ai-entry-card .modal-header .icon-button { flex-basis: 36px !important; width: 36px !important; min-width: 36px !important; height: 36px !important; min-height: 36px !important; }
+  .ai-overlay .ai-fix-review-actions { padding: 10px; gap: 7px; }
+  .ai-overlay .ai-fix-review-actions .pill,
+  .ai-overlay .ai-fix-review-actions .btn-main { padding: 8px 12px; font-size: 11px; }
+}
