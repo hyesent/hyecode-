@@ -2021,4 +2021,51 @@ CREATE POLICY "Users can insert own templates" ON templates FOR INSERT WITH CHEC
   {"name": "Objective-C starter", "code": "#import <Foundation/Foundation.h>\nint main(void) {\n  @autoreleasepool { NSLog(@\"Hello, Hyecode!\"); }\n  return 0;\n}", "desc": "Objective-C is used in legacy Apple codebases and interoperates with C."},
   {"name": "XML starter", "code": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project>\n  <name>Hyecode</name>\n</project>", "desc": "XML represents structured data with nested, named elements."},
   {"name": "YAML starter", "code": "project:\n  name: Hyecode\n  languages:\n    - JavaScript\n    - Python", "desc": "YAML is a human-readable data serialization format; indentation is significant."}
+  ,{ name: 'Responsive landing page', desc: 'A dependency-free responsive landing page starter with semantic HTML and mobile-first CSS.', code: `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Landing page</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.6 system-ui, sans-serif; color: #172033; }
+    main { width: min(100% - 2rem, 70rem); margin: auto; }
+    .hero { padding: clamp(3rem, 10vw, 8rem) 0; }
+    .hero h1 { max-width: 12ch; font-size: clamp(2.5rem, 8vw, 5rem); line-height: 1.05; }
+    .button { display: inline-block; padding: .8rem 1.1rem; border-radius: .6rem; background: #155eef; color: white; text-decoration: none; }
+  </style>
+</head>
+<body><main><section class="hero"><p>Build something useful</p><h1>A clear headline for your product.</h1><p>Explain the value in one short paragraph.</p><a class="button" href="#details">Get started</a></section><section id="details"><h2>Why it helps</h2><p>Add the details people need to decide.</p></section></main></body>
+</html>` },
+  { name: 'Accessible form', desc: 'Accessible form fields with labels, browser validation, and a success message.', code: `<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Contact form</title></head>
+<body><main><h1>Contact us</h1><form id="contact-form"><label for="email">Email address</label><input id="email" name="email" type="email" autocomplete="email" required><label for="message">Message</label><textarea id="message" name="message" required minlength="10"></textarea><button type="submit">Send</button><p id="form-status" role="status" aria-live="polite"></p></form></main><script>document.querySelector('#contact-form').addEventListener('submit', event => { event.preventDefault(); document.querySelector('#form-status').textContent = 'Form validated. Connect a backend to deliver messages.'; });</script></body></html>` },
+  { name: 'JavaScript fetch with errors', desc: 'A safe fetch pattern that checks HTTP status and handles network errors.', code: `async function loadJson(url) {
+  try {
+    const response = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error(\`Request failed: \${response.status} \${response.statusText}\`);
+    return await response.json();
+  } catch (error) {
+    console.error('Could not load data:', error);
+    throw error;
+  }
+}` },
+  { name: 'React loading and error states', desc: 'A small React pattern for loading data and rendering loading, error, and success states.', code: `import { useEffect, useState } from 'react';
+
+export function DataPanel({ url }) {
+  const [state, setState] = useState({ loading: true, error: '', data: null });
+  useEffect(() => {
+    const controller = new AbortController();
+    setState({ loading: true, error: '', data: null });
+    fetch(url, { signal: controller.signal })
+      .then(response => { if (!response.ok) throw new Error(\`HTTP \${response.status}\`); return response.json(); })
+      .then(data => setState({ loading: false, error: '', data }))
+      .catch(error => { if (error.name !== 'AbortError') setState({ loading: false, error: error.message, data: null }); });
+    return () => controller.abort();
+  }, [url]);
+  if (state.loading) return <p>Loading…</p>;
+  if (state.error) return <p role="alert">Could not load data: {state.error}</p>;
+  return <pre>{JSON.stringify(state.data, null, 2)}</pre>;
+}` }
 ]

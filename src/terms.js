@@ -704,4 +704,15 @@ export const terms = [
   {"name": "Objective-C language", "code": "#import <Foundation/Foundation.h>\nint main(void) {\n  @autoreleasepool { NSLog(@\"Hello, Hyecode!\"); }\n  return 0;\n}", "desc": "Objective-C is used in legacy Apple codebases and interoperates with C.", "source": "local"},
   {"name": "XML language", "code": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project>\n  <name>Hyecode</name>\n</project>", "desc": "XML represents structured data with nested, named elements.", "source": "local"},
   {"name": "YAML language", "code": "project:\n  name: Hyecode\n  languages:\n    - JavaScript\n    - Python", "desc": "YAML is a human-readable data serialization format; indentation is significant.", "source": "local"}
+  ,{ name: 'async / await', code: `async function loadData() {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(\`HTTP \${response.status}\`);
+  return response.json();
+}`, desc: 'Syntax for working with Promises using a readable sequential style. Handle rejections with try/catch.', source: 'local' },
+  { name: 'Promise', code: 'const result = await Promise.all([loadA(), loadB()]);', desc: 'Represents the eventual result or failure of an asynchronous operation. Promise.all runs multiple promises concurrently.', source: 'local' },
+  { name: 'HTTP status', code: 'if (!response.ok) throw new Error(\`HTTP \${response.status}\`);', desc: 'The numeric result of an HTTP request. Fetch requires checking response.ok because 404 and 500 responses do not automatically throw.', source: 'local' },
+  { name: 'ARIA live region', code: '<p role="status" aria-live="polite">Saved successfully</p>', desc: 'Announces dynamic status changes to assistive technology without moving keyboard focus.', source: 'local' },
+  { name: 'AbortController', code: `const controller = new AbortController();
+fetch(url, { signal: controller.signal });
+controller.abort();`, desc: 'Cancels supported web requests and is useful for cleanup when a component unmounts or a newer request replaces an old one.', source: 'local' }
 ]
