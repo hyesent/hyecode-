@@ -107,6 +107,7 @@ const GitHubMark = ({ size = 16, style = {}, ...props }) => (
 
 const LocalLlama = registerPlugin('LocalLlama')
 const ProjectFolder = registerPlugin('ProjectFolder')
+const OpenFileBridge = registerPlugin('OpenFileBridge')
 const safeStorage = { get(key, fallback) { try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)) } catch { return fallback } }, set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)) } catch {} } }
 const escapeRegExp = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -227,6 +228,49 @@ const HyeEditorCore = () => {
   useEffect(() => {
     const splashTimer = window.setTimeout(() => setShowBrandSplash(false), 1450)
     return () => window.clearTimeout(splashTimer)
+  }, [])
+
+  // Receive files opened from Android's file manager (ACTION_VIEW / ACTION_EDIT).
+  // Poll only while the WebView is visible so files opened while Hyecode is already
+  // running are picked up without requiring an app restart.
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+    let disposed = false
+    let checking = false
+    const receiveExternalFile = async () => {
+      if (disposed || checking || document.visibilityState === 'hidden') return
+      checking = true
+      try {
+        const result = await OpenFileBridge.consumePendingFile()
+        if (disposed || !result?.available) return
+        const name = String(result.name || 'opened-file.txt')
+        const content = String(result.content ?? '')
+        const uri = String(result.uri || '')
+        const id = `external-${uid()}`
+        const item = { id, name, path: uri || name, externalUri: uri, type: 'file', content, dirty: false, binary: false, unreadable: false }
+        setFiles(previous => [item, ...previous.filter(file => file.externalUri !== uri)])
+        setOpenFiles(previous => [id, ...previous.filter(openId => !filesRef.current.some(file => file.externalUri === uri && file.id === openId))])
+        setActiveId(id)
+        setActiveOverlay(null)
+        setStatus(`Opened ${name} from Android`)
+      } catch (error) {
+        if (!disposed) {
+          setStatus(`Could not open external file: ${error?.message || 'unsupported file'}`)
+          addDebugEntry('warn', `Android file open failed: ${error?.message || error}`)
+        }
+      } finally { checking = false }
+    }
+    const onVisible = () => { if (document.visibilityState === 'visible') receiveExternalFile() }
+    const timer = window.setInterval(receiveExternalFile, 1800)
+    window.addEventListener('focus', receiveExternalFile)
+    document.addEventListener('visibilitychange', onVisible)
+    receiveExternalFile()
+    return () => {
+      disposed = true
+      window.clearInterval(timer)
+      window.removeEventListener('focus', receiveExternalFile)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [])
 
   useEffect(() => { debugEntriesRef.current = debugEntries }, [debugEntries])
@@ -877,13 +921,25 @@ const HyeEditorCore = () => {
   const saveDirtyFiles = async () => {
     const dirty = filesRef.current.filter(file => file.type === 'file' && file.dirty)
     if (!dirty.length) { setStatus('All files saved'); return }
-    if (!workspacePath) { setStatus('Open a workspace before saving'); return }
+    const externalDirty = dirty.filter(file => file.externalUri)
+    const workspaceDirty = dirty.filter(file => !file.externalUri)
+    if (workspaceDirty.length && !workspacePath) {
+      setStatus('Save the Android-opened file separately, or open a workspace before saving workspace files')
+      if (!externalDirty.length) return
+    }
     try {
-      for (const file of dirty) await Filesystem.writeFile({ path: file.path, directory: Directory.ExternalStorage, data: file.content, encoding: Encoding.UTF8, recursive: true })
-      setFiles(previous => previous.map(file => ({ ...file, dirty: false })))
-      setStatus(`Saved ${dirty.length} file${dirty.length === 1 ? '' : 's'}`)
-      safeStorage.set('hye_recovery', null)
-      setRecoveryAvailable(false)
+      for (const file of externalDirty) {
+        await OpenFileBridge.saveFile({ uri: file.externalUri, content: file.content })
+      }
+      for (const file of workspaceDirty) {
+        if (!workspacePath) continue
+        await Filesystem.writeFile({ path: file.path, directory: Directory.ExternalStorage, data: file.content, encoding: Encoding.UTF8, recursive: true })
+      }
+      const savedIds = new Set([...externalDirty.map(file => file.id), ...(workspacePath ? workspaceDirty.map(file => file.id) : [])])
+      setFiles(previous => previous.map(file => savedIds.has(file.id) ? { ...file, dirty: false } : file))
+      const savedCount = savedIds.size
+      setStatus(`Saved ${savedCount} file${savedCount === 1 ? '' : 's'}`)
+      if (workspacePath) { safeStorage.set('hye_recovery', null); setRecoveryAvailable(false) }
     } catch (error) {
       addDebugEntry('error', `Save failed: ${error.message}`)
       setStatus(`Save failed: ${error.message}`)
