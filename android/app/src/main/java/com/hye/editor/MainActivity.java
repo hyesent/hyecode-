@@ -29,10 +29,18 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(LocalLlamaPlugin.class);
         registerPlugin(ProjectFolderPlugin.class);
+        registerPlugin(OpenFileBridgePlugin.class);
         super.onCreate(savedInstanceState);
 
         // Let the Capacitor WebView start before showing Android's permission rationale.
         new Handler(Looper.getMainLooper()).postDelayed(this::ensureStorageAccess, 900);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        // singleTask activities are reused when Android opens another document in Hyecode.
+        setIntent(intent);
     }
 
     private void ensureStorageAccess() {
